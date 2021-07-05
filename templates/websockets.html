@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Stream log</title>
+        <style>
+            table {
+                border-collapse: collapse;
+                width: 100%;
+            }
+
+            th, td {
+                text-align: left;
+                padding: 8px;
+            }
+
+            td.debug {
+                background-color: lightpink;
+            }
+            td.info {
+                background-color: lightseagreen;
+            }
+            td.warning {
+                background-color:coral;
+            }
+            td.error {
+                background-color: red;
+                color: seashell;
+            }
+            td.critical {
+                background-color: crimson;
+                color: seashell;
+            }
+
+            tr:nth-child(even) {
+                background-color: #f2f2f2;
+            }
+        </style>
+    </head>
+    <input type="text" id="nummessages" value=100></input>
+    <button type="button" id="generate">Generate messages</button>
+    <button type="button" id="resetcounter">Reset counter</button>
+    <body>
+        <h1>Redis Streams log</h1>
+        <h2>Displayed events: <p id="streamcounter"></p></h2>
+        <table id="log">
+            <thead>
+                <th>Timestamp</th>
+                <th>Log level</th>
+                <th>Hostname</th>
+                <th>Message</th>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <script>
+            var client_id = Date.now()
+            var ws = new WebSocket(`ws://{{ host  }}:{{ port }}/ws/${client_id}`);
+            var streamcounter = 0;
+            ws.onmessage = function(event) {
+                //console.log(event.data)
+                var data = JSON.parse(event.data)
+                if (data.type == "ping") {
+                    ws.send("pong")
+                }
+                else {
+                    data = data.data
+                    document.getElementById("streamcounter").innerText = ++streamcounter;
+                    var table = document.getElementById("log").getElementsByTagName('tbody')[0]
+                    var newRow = table.insertRow(0)
+                    var cell1 = newRow.insertCell(0)
+                    var cell2 = newRow.insertCell(1)
+                    var cell3 = newRow.insertCell(2)
+                    var cell4 = newRow.insertCell(3)
+                    cell1.innerText = data.timestamp
+                    cell2.innerText = data.log_level
+                    cell2.className = data.log_level.toLowerCase()
+                    cell3.innerText = data.hostname
+                    cell4.innerText = data.message
+                    if (document.getElementById("log").rows.length > 25) {
+                        table.deleteRow(-1)
+                    }
+                };
+            }
+            document.getElementById("generate").onclick = function(e) {
+                n = document.getElementById("nummessages").value
+                fetch("http://{{ host  }}:{{ port }}/generate/" + n)
+            }
+            document.getElementById("resetcounter").onclick = function(e) {
+                streamcounter = 0
+                document.getElementById("streamcounter").innerText = streamcounter;
+            }
+            function sendMessage(event) {
+                var input = document.getElementById("messageText")
+                ws.send(input.value)
+                input.value = ''
+                event.preventDefault()
+            }
+        </script>
+    </body>
+</html>
