@@ -1,6 +1,6 @@
 # Redis Log streaming demo
 
-Uses [FastApi](https://fastapi.tiangolo.com/) for asynchronous web serving. All communication is done over WebSockets.
+Uses [FastAPI](https://fastapi.tiangolo.com/) for asynchronous web serving. All communication is done over WebSockets.
 
 ## Installation
 
