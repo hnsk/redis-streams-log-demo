@@ -17,3 +17,6 @@ pip install -r requirements.txt
 # to run
 uvicorn websocket:app
 ```
+### Usage
+
+Connect to `http://localhost:8000` and generate some logs.
