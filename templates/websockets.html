@@ -39,6 +39,10 @@
     <input type="text" id="nummessages" value=100></input>
     <button type="button" id="generate">Generate messages</button>
     <button type="button" id="resetcounter">Reset counter</button>
+    <button type="button" id="updatestreams">Update available streams</button>
+    <button type="button" id="registersplitter">Register stream splitter</button>
+    <br>
+    <div id="streamselector"></div>
     <body>
         <h1>Redis Streams log</h1>
         <h2>Displayed events: <p id="streamcounter"></p></h2>
@@ -52,9 +56,47 @@
             <tbody></tbody>
         </table>
         <script>
-            var client_id = Date.now()
-            var ws = new WebSocket(`ws://{{ host  }}:{{ port }}/ws/${client_id}`);
+            var client_id = {{ client_id }};
+            var ws = new WebSocket(`ws://{{ host }}:{{ port }}/ws/${client_id}`);
             var streamcounter = 0;
+
+            function update_available_streams() {
+                var available_streams;
+                fetch("http://{{ host }}:{{ port }}/streams/update")
+                .then(res => res.json())
+                .then(data => available_streams = data)
+                .then(() => update_stream_list(available_streams))
+            };
+
+            function update_stream_list(streams) {
+                var streamselector = document.getElementById("streamselector")
+                streamselector.textContent = "";
+                for (var stream in streams) {
+                    var item = document.createElement("span")
+                    var selector = document.createElement("input")
+                    selector.setAttribute("type", "checkbox")
+                    selector.setAttribute("id", stream)
+                    selector.setAttribute("class", "streambox")
+                    selector.setAttribute("checked", "true")
+                    selector.addEventListener("click", toggleStream)
+                    item.appendChild(selector);
+                    var text = document.createTextNode(stream)
+                    item.appendChild(text)
+                    streamselector.appendChild(item)
+                    fetch(`http://{{ host }}:{{ port }}/streams/${client_id}/add/${stream}`)
+                }
+            }
+
+            function toggleStream(event) {
+                if (event.target.checked) {
+                    var type = "add";
+                }
+                else {
+                    var type = "del";
+                }
+                fetch(`http://{{ host }}:{{ port }}/streams/${client_id}/${type}/${event.target.id}`)
+            }
+
             ws.onmessage = function(event) {
                 //console.log(event.data)
                 var data = JSON.parse(event.data)
@@ -87,6 +129,12 @@
             document.getElementById("resetcounter").onclick = function(e) {
                 streamcounter = 0
                 document.getElementById("streamcounter").innerText = streamcounter;
+            }
+            document.getElementById("updatestreams").onclick = function(e) {
+                update_available_streams();
+            }
+            document.getElementById("registersplitter").onclick = function(e) {
+                fetch("http://{{ host  }}:{{ port }}/streams/splitter")
             }
             function sendMessage(event) {
                 var input = document.getElementById("messageText")

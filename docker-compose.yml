@@ -2,7 +2,7 @@ version: '3'
 
 services:
   redis:
-    image: "redis:latest"
+    image: "redislabs/redismod:latest"
     ports:
       - "6379:6379"
   streamsdemo:
@@ -14,3 +14,4 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - PYTHONUNBUFFERED=1
