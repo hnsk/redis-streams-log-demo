@@ -21,4 +21,4 @@ uvicorn websocket:app
 ```
 ### Usage
 
-Connect to <http://localhost:8000> and generate some logs.
+Connect to <http://127.0.0.1:8000> and generate some logs.
