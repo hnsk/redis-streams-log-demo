@@ -1,8 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 from os import environ
-from random import randint
-from time import sleep, time
+from time import time
 
 import aioredis
 
@@ -20,13 +19,23 @@ REDIS_CONSUMER_GROUP = environ.get('REDIS_CONSUMER_GROUP') or 'testgroup'
 REDIS_STREAM_NAME = environ.get('REDIS_STREAM_NAME') or 'test'
 
 @dataclass
-class websocketClientConnection:
+class WebsocketClientConnection:
     websocket: WebSocket
     streams: dict
 
+    def add_stream(self, stream):
+        self.streams[stream] = ">"
+
+    def remove_stream(self, stream):
+        if stream in self.streams:
+            del self.streams[stream]
+
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
-rpool = aioredis.ConnectionPool(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+rpool = aioredis.ConnectionPool(
+    host=REDIS_HOST,
+    port=REDIS_PORT,
+    decode_responses=True)
 
 class ConnectionManager:
     def __init__(self):
@@ -38,13 +47,13 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket, client_id: int):
         await websocket.accept()
         await self.update_available_streams()
-        self.active_connections[client_id] = websocketClientConnection(
+        self.active_connections[client_id] = WebsocketClientConnection(
             websocket=websocket,
             streams=self.available_streams
         )
 
     def disconnect(self, client_id: int) -> None:
-        del(self.active_connections[client_id])
+        del self.active_connections[client_id]
 
     async def update_available_streams(self) -> dict:
         cursor = None
@@ -55,7 +64,7 @@ class ConnectionManager:
                 cursor=cursor or 0)
             for severity in res:
                 avail[severity[0]] = ">"
-                if severity[0] not in self.available_streams.keys():
+                if severity[0] not in self.available_streams:
                     try:
                         await self.rconn.xgroup_create(
                             name=severity[0],
@@ -67,19 +76,7 @@ class ConnectionManager:
         if len(avail) == 0 and not self.splitter_active:
             avail = {REDIS_STREAM_NAME: ">"}
         self.available_streams = avail
-        for client_id in self.active_connections.keys():
-            self.reset_streams_to_default(client_id)
         return avail
-
-    def remove_stream_from_client(self, client_id: int, stream: str):
-        if stream in self.active_connections[client_id].streams:
-            del(self.active_connections[client_id].streams[stream])
-
-    def add_stream_to_client(self, client_id: int, stream: str):
-        self.active_connections[client_id].streams[stream] = ">"
-
-    def reset_streams_to_default(self, client_id: int):
-        self.active_connections[client_id].streams = self.available_streams
 
     def activate_splitter(self):
         self.splitter_active = True
@@ -116,7 +113,7 @@ async def startup_event():
 @app.on_event("shutdown")
 def shutdown_event():
     print("shutting down")
-    for client_id in manager.active_connections.keys():
+    for client_id in manager.active_connections:
         manager.disconnect(client_id)
 
 @app.get("/", response_class=HTMLResponse)
@@ -143,9 +140,9 @@ async def register_stream_splitter():
         maxlen=0,
         approximate=False)
     print(f"Removing {REDIS_STREAM_NAME} from all clients")
-    for client_id in manager.active_connections.keys():
-        manager.remove_stream_from_client(client_id, REDIS_STREAM_NAME)
-    print(f"Registering severity splitter... ", end="")
+    for client_id in manager.active_connections:
+        manager.active_connections[client_id].remove_stream(REDIS_STREAM_NAME)
+    print("Registering severity splitter... ", end="")
     print(await r.execute_command('RG.PYEXECUTE', gears_functions.SPLIT_BY_SEVERITY))
     manager.activate_splitter()
     return JSONResponse(content={"response": "ok"})
@@ -157,12 +154,12 @@ async def update_streams():
 
 @app.get("/streams/{client_id}/add/{stream}", response_class=JSONResponse)
 def add_stream_to_client(client_id: int, stream: str):
-    manager.add_stream_to_client(client_id, stream)
+    manager.active_connections[client_id].add_stream(stream)
     return JSONResponse(content={"response": "ok"})
 
 @app.get("/streams/{client_id}/del/{stream}", response_class=JSONResponse)
-def add_stream_to_client(client_id: int, stream: str):
-    manager.remove_stream_from_client(client_id, stream)
+def del_stream_from_client(client_id: int, stream: str):
+    manager.active_connections[client_id].remove_stream(stream)
     return JSONResponse(content={"response": "ok"})
 
 @app.websocket("/ws/{client_id}")
@@ -201,6 +198,8 @@ async def read_streams(client_id: str):
     r = aioredis.Redis(connection_pool=rpool)
     consumername = f"consumer-{client_id}"
     if client_id in manager.active_connections and len(manager.active_connections[client_id].streams) > 0:
+        #print(client_id)
+        #print(manager.active_connections[client_id].streams)
         response = []
         try:
             data = await r.xreadgroup(
@@ -217,7 +216,7 @@ async def read_streams(client_id: str):
                         REDIS_CONSUMER_GROUP,
                         entry[1][0][0] # Stream ID
                     )
-        except aioredis.exceptions.DataError as e:
+        except aioredis.exceptions.DataError:
             # If no streams are being consumed just return and try again later
             pass
         return response
@@ -226,5 +225,5 @@ async def generate_messages(
     stream: str = REDIS_STREAM_NAME,
     n: int = 100):
     r = aioredis.Redis(connection_pool=rpool)
-    for x in range(n):
+    for _ in range(n):
         await log_generator.add_message(r, stream)
