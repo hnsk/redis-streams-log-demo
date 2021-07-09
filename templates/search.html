@@ -40,6 +40,10 @@
                 grid-template-columns: 1fr 1fr;
                 grid-gap: 20px;
             }
+
+            .examplequery:hover {
+                text-decoration: underline;
+            }
         </style>
     </head>
 {% include 'navbar.html' %}
@@ -57,6 +61,15 @@
     <div id="severity_pie"></div>
     </div>
     <hr>
+    <p>Example queries (click one)</p>
+    <ul>
+        <li class="examplequery">hello</li>
+        <li class="examplequery">%hllo%</li>
+        <li class="examplequery">hel*</li>
+        <li class="examplequery">@hostname:123</li>
+        <li class="examplequery">@log_level:{warning}</li>
+        <li class="examplequery">%hllo% @hostname:123 @log_level:{warning|debug}</li>
+    </ul>
     <span>Search: </span><input type="text" id="search_input"></input>
     <br>
     <div id="streamselector"></div>
@@ -115,6 +128,14 @@
 
             document.getElementById("update_aggregates").onclick = function(e) {
                 aggregate_by_field("log_level");
+            }
+
+            var examples = document.getElementsByClassName("examplequery");
+            for (example in examples) {
+                examples[example].onclick = function() {
+                    search_for_string(this.textContent);
+                    document.getElementById("search_input").value = this.textContent;
+                }
             }
 
             function update_aggregates(aggregate_results) {
