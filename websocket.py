@@ -1,17 +1,21 @@
 import asyncio
 from dataclasses import dataclass
 from os import environ
+from pydantic import BaseModel
 from time import time
 
 import aioredis
+from aioredis.client import string_keys_to_dict
 
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from redis import ResponseError
 from websockets.exceptions import ConnectionClosedOK, ConnectionClosedError
 
 import log_generator
 import gears_functions
+import search
 
 REDIS_HOST = environ.get('REDIS_HOST') or 'localhost'
 REDIS_PORT = environ.get('REDIS_PORT') or '6379'
@@ -117,7 +121,7 @@ def shutdown_event():
         manager.disconnect(client_id)
 
 @app.get("/", response_class=HTMLResponse)
-async def get(request: Request):
+async def get_index(request: Request):
     r = aioredis.Redis(connection_pool=rpool)
     client_id = await r.incrby("consumerids", 1)
     return templates.TemplateResponse("websockets.html", {
@@ -227,3 +231,57 @@ async def generate_messages(
     r = aioredis.Redis(connection_pool=rpool)
     for _ in range(n):
         await log_generator.add_message(r, stream)
+
+
+@app.get("/search", response_class=HTMLResponse)
+async def get_search(request: Request):
+    return templates.TemplateResponse("search.html", {
+        "request": request,
+        "host": "127.0.0.1",
+        "port": 8000
+        })
+
+class SearchQuery(BaseModel):
+    query: str
+
+@app.post("/search", response_class=JSONResponse)
+def search_string(query: SearchQuery):
+    search.create_index()
+    results = {}
+    results['total'] = 0
+    results['duration'] = 0
+    results['messages'] = []
+    try:
+        for res in search.search_index(query.query):
+            results['total'] = res.total
+            results['duration'] += res.duration
+            for doc in res.docs:
+                results['messages'].append({
+                    "hostname": doc.hostname,
+                    "timestamp": doc.timestamp,
+                    "message": doc.message,
+                    "log_level": doc.log_level
+                })
+    except ResponseError:
+        print(f"invalid query {query.query}")
+    results['duration'] = f"{results['duration']:.2f}"
+    results['numresults'] = len(results['messages'])
+    return JSONResponse(results)
+
+class AggregateQuery(BaseModel):
+    field: str
+
+@app.post("/search/aggregate", response_class=JSONResponse)
+def search_aggregate_by_fields(query: AggregateQuery):
+    search.create_index()
+    results = []
+    try:
+        for res in search.aggregate_by_field(query.field):
+            for row in res.rows:
+                results.append({
+                    "field": row[1],
+                    "entries": row[3]
+                })
+    except ResponseError:
+        print(f"invalid query {query}")
+    return JSONResponse(results)

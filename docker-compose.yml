@@ -2,9 +2,17 @@ version: '3'
 
 services:
   redis:
-    image: "redislabs/redismod:latest"
+    image: "redislabs/redismod:edge"
     ports:
       - "6379:6379"
+    command: [
+      "--loadmodule",
+      "/usr/lib/redis/modules/redisearch.so",
+      "--loadmodule",
+      "/var/opt/redislabs/lib/modules/redisgears.so",
+      "Plugin",
+      "/var/opt/redislabs/modules/rg/plugin/gears_python.so"
+    ]
   streamsdemo:
     build: .
     links:

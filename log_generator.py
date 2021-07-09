@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from datetime import datetime
-from random import choice, randint
+from random import choice, choices, randint
 from time import time, sleep
 import aioredis
 
@@ -31,7 +31,17 @@ def random_message():
     message = {}
     message['timestamp'] = datetime.now().isoformat()
     message['hostname'] = choice(HOSTS)
-    message['log_level'] = choice(LOG_LEVELS)
+    message['log_level'] = choices(
+        population=LOG_LEVELS,
+        weights=[
+            0.3,
+            0.3,
+            0.2,
+            0.15,
+            0.05
+        ],
+        k=1
+    )[0]
     message['message'] = choice(MESSAGES)
     return message
 
@@ -44,12 +54,3 @@ async def add_message(r, stream="test"):
         approximate=True
     )
     return ret
-
-# if __name__ == '__main__':
-#     r = aioredis.Redis(host=REDIS_HOST)
-#     for x in range(10000):
-#         #message = random_message()
-#         id = await add_message(r)
-#         #print(f"{message} stored as {id}")
-#         print(x)
-#         #sleep(randint(0,100) / 1000)
