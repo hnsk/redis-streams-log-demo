@@ -151,7 +151,7 @@
                     var cell1 = newRow.insertCell(0)
                     var cell2 = newRow.insertCell(1)
                     cell1.innerHTML = data.field.toUpperCase()
-                    cell1.className = data.field
+                    cell1.className = data.field.toLowerCase()
                     cell2.innerHTML = data.entries
                 }
                 drawAggregatePie(results);
@@ -184,11 +184,25 @@
 
             function drawAggregatePie(array) {
                 var data = google.visualization.arrayToDataTable(array);
+                var colors = {
+                    'DEBUG': 'lightpink',
+                    'INFO': 'lightseagreen',
+                    'WARNING': 'coral',
+                    'ERROR': 'red',
+                    'CRITICAL': 'crimson'
+                };
+                var slices = [];
+                for (var i = 0; i < data.getNumberOfRows(); i++) {
+                    slices.push({
+                    color: colors[data.getValue(i, 0)]
+                    });
+                }
                 var options = {
                     //'title': 'Severities distribution',
                     'width': 550,
                     'height': 300,
-                    'is3D': true
+                    'is3D': true,
+                    'slices': slices
                 };
                 var chart = new google.visualization.PieChart(document.getElementById('severity_pie'));
                 chart.draw(data, options)
