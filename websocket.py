@@ -251,10 +251,13 @@ def search_string(query: SearchQuery):
     results['total'] = 0
     results['duration'] = 0
     results['messages'] = []
+    results['literal_query'] = ""
+    results['error'] = ""
     try:
-        for res in search.search_index(query.query):
+        for res, literal_query in search.search_index(query.query):
             results['total'] = res.total
             results['duration'] += res.duration
+            results['literal_query'] = literal_query
             for doc in res.docs:
                 results['messages'].append({
                     "hostname": doc.hostname,
@@ -264,24 +267,32 @@ def search_string(query: SearchQuery):
                 })
     except ResponseError:
         print(f"invalid query {query.query}")
+        results['error'] = f"Invalid query {query.query}"
     results['duration'] = f"{results['duration']:.2f}"
     results['numresults'] = len(results['messages'])
     return JSONResponse(results)
 
 class AggregateQuery(BaseModel):
+    query: str
     field: str
 
 @app.post("/search/aggregate", response_class=JSONResponse)
 def search_aggregate_by_fields(query: AggregateQuery):
     search.create_index()
-    results = []
+    result = {}
+    result["results"] = []
+    result["literal_query"] = ""
+    result["error"] = ""
     try:
-        for res in search.aggregate_by_field(query.field):
+        for res, literal_query in search.aggregate_by_field(query.query, query.field):
+            result["literal_query"] = literal_query
             for row in res.rows:
-                results.append({
+                result["results"].append({
                     "field": row[1],
                     "entries": row[3]
                 })
     except ResponseError:
-        print(f"invalid query {query}")
-    return JSONResponse(results)
+        print(f"invalid query {query.query}")
+        result["error"] = f"Invalid query {query.query}"
+
+    return JSONResponse(result)
