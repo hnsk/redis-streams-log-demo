@@ -23,7 +23,7 @@ uvicorn websocket:app
 ```
 ### Usage
 
-Connect to <http://127.0.0.1:8000> and generate some logs.
+Connect to http://yourhost:8000 and generate some logs.
 
 #### Index
 - Generate messages: generates n messages to stream "test"
@@ -32,5 +32,5 @@ Connect to <http://127.0.0.1:8000> and generate some logs.
 - Register stream splitter: Registers RedisGears function to split "test" to streams for each severity and generates hashes for RedisSearch
 
 #### RediSearch
-- Update aggregates: Will refresh the severities counters
 - Search: If input is longer than 2 characters, every time the field is updated, it will perform RediSearch query with the input value
+- If you enable auto-refresh then search is performed once a second
