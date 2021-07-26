@@ -58,12 +58,12 @@
         </table>
         <script>
             var client_id = {{ client_id }};
-            var ws = new WebSocket(`ws://{{ host }}:{{ port }}/ws/${client_id}`);
+            var ws = new WebSocket("ws://" + window.location.host + `/ws/${client_id}`);
             var streamcounter = 0;
 
             function update_available_streams() {
                 var available_streams;
-                fetch("http://{{ host }}:{{ port }}/streams/update")
+                fetch("/streams/update")
                 .then(res => res.json())
                 .then(data => available_streams = data)
                 .then(() => update_stream_list(available_streams))
@@ -84,7 +84,7 @@
                     var text = document.createTextNode(stream)
                     item.appendChild(text)
                     streamselector.appendChild(item)
-                    fetch(`http://{{ host }}:{{ port }}/streams/${client_id}/add/${stream}`)
+                    fetch(`/streams/${client_id}/add/${stream}`)
                 }
             }
 
@@ -95,7 +95,7 @@
                 else {
                     var type = "del";
                 }
-                fetch(`http://{{ host }}:{{ port }}/streams/${client_id}/${type}/${event.target.id}`)
+                fetch(`/streams/${client_id}/${type}/${event.target.id}`)
             }
 
             ws.onmessage = function(event) {
@@ -125,7 +125,7 @@
             }
             document.getElementById("generate").onclick = function(e) {
                 n = document.getElementById("nummessages").value
-                fetch("http://{{ host  }}:{{ port }}/generate/" + n)
+                fetch("/generate/" + n)
             }
             document.getElementById("resetcounter").onclick = function(e) {
                 streamcounter = 0
@@ -135,7 +135,7 @@
                 update_available_streams();
             }
             document.getElementById("registersplitter").onclick = function(e) {
-                fetch("http://{{ host  }}:{{ port }}/streams/splitter")
+                fetch("/streams/splitter")
             }
             function sendMessage(event) {
                 var input = document.getElementById("messageText")

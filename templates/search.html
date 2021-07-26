@@ -172,7 +172,7 @@
 
         function search_for_string(search_string) {
             var search_results;
-            const res = fetch("http://{{ host }}:{{ port }}/search", {
+            const res = fetch("/search", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
@@ -186,7 +186,7 @@
 
         function aggregate_by_field(query, field) {
             var aggregate_results;
-            const res = fetch("http://{{ host }}:{{ port }}/search/aggregate", {
+            const res = fetch("/search/aggregate", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
