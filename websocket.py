@@ -1,11 +1,10 @@
 import asyncio
 from dataclasses import dataclass
 from os import environ
-from pydantic import BaseModel
 from time import time
+from pydantic import BaseModel
 
 import aioredis
-from aioredis.client import string_keys_to_dict
 
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -30,9 +29,11 @@ class WebsocketClientConnection:
     streams: dict
 
     def add_stream(self, stream):
+        """ Add stream to the client. """
         self.streams[stream] = ">"
 
     def remove_stream(self, stream):
+        """ Remove stream from the client. """
         if stream in self.streams:
             del self.streams[stream]
 
