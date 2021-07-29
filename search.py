@@ -31,6 +31,8 @@ def create_index(
     idx_schema: Tuple = LOG_SCHEMA,
     idx_prefix: List = LOG_PREFIX
     ):
+    """ Create index if it doesn't exist. """
+
     definition = IndexDefinition(prefix=idx_prefix)
     try:
         client.info()
@@ -39,6 +41,8 @@ def create_index(
     
 
 def search_index(query: str, limit: int = 100):
+    """ Search for query from index. """
+
     count = 0
     while True:
         request = Query(f"{query}").sort_by("timestamp", asc=False).paging(count, 100).highlight()
@@ -51,7 +55,8 @@ def search_index(query: str, limit: int = 100):
         
 
 def aggregate_by_field(query: str, field: str):
-    result = []
+    """ Aggregate counts for query and group by field. """
+
     request = AggregateRequest(query).group_by(
         f"@{field}",
         reducers.count().alias("entries")

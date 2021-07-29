@@ -28,6 +28,7 @@ MESSAGES = [
 ]
 
 def random_message():
+    """ Generate random log message with weighted log severities"""
     message = {}
     message['timestamp'] = datetime.now().isoformat()
     message['hostname'] = choice(HOSTS)
@@ -46,6 +47,7 @@ def random_message():
     return message
 
 async def add_message(r, stream="test"):
+    """ Add log message to Redis stream. """
     message = random_message()
     ret = await r.xadd(
         name=stream,
