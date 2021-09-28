@@ -25,3 +25,9 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - PYTHONUNBUFFERED=1
+  redisinsight:
+    image: "redislabs/redisinsight:latest"
+    links:
+      - "redis:redis"
+    ports:
+      - "8001:8001"
