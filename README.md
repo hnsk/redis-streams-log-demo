@@ -25,6 +25,8 @@ uvicorn websocket:app
 
 Connect to http://yourhost:8000 and generate some logs.
 
+RedisInsight is also available at http://yourhost:8001
+
 #### Index
 - Generate messages: generates n messages to stream "test"
 - Reset counter: Resets the JavaScript counter
