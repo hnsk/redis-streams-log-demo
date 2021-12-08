@@ -11,6 +11,8 @@ ports:
   - port: 8000
     onOpen: open-browser
     visibility: public
-
+  - port: 8001
+    onOpen: open-browser
+    visibility: public
     
 
