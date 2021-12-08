@@ -18,7 +18,9 @@ services:
       - REDIS_PORT=6379
       - PYTHONUNBUFFERED=1
   redisinsight:
-    image: "redislabs/redisinsight:latest"
+    build: ./redisinsight
+    depends_on:
+      - "redis"
     links:
       - "redis:redis"
     ports:
