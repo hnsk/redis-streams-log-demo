@@ -58,7 +58,12 @@
         </table>
         <script>
             var client_id = {{ client_id }};
-            var ws = new WebSocket("ws://" + window.location.host + `/ws/${client_id}`);
+            if (location.protocol !== 'https:') {
+                var ws = new WebSocket("ws://" + window.location.host + `/ws/${client_id}`);
+            }
+            else {
+                var ws = new WebSocket("wss://" + window.location.host + `/ws/${client_id}`);
+            }
             var streamcounter = 0;
 
             function update_available_streams() {
