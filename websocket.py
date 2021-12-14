@@ -1,4 +1,5 @@
 import asyncio
+import json
 from dataclasses import dataclass
 from os import environ
 from time import time
@@ -243,7 +244,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int):
                 for contents in data:
                     await manager.send_client_json({
                         'type': 'message',
-                        'data': contents},
+                        'data': json.loads(contents["json"])},
                         client_id)
     except (ConnectionClosedOK, ConnectionClosedError):
         print(f"{client_id} disconnected")
@@ -321,12 +322,7 @@ def search_string(query: SearchQuery):
             results['duration'] += res.duration
             results['literal_query'] = literal_query
             for doc in res.docs:
-                results['messages'].append({
-                    "hostname": doc.hostname,
-                    "timestamp": doc.timestamp,
-                    "message": doc.message,
-                    "log_level": doc.log_level
-                })
+                results['messages'].append(json.loads(doc.json))
     except ResponseError:
         print(f"invalid query {query.query}")
         results['error'] = f"Invalid query {query.query}"

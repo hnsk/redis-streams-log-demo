@@ -8,7 +8,7 @@ from redis.commands.search import reducers
 from redis.commands.search.aggregation import AggregateRequest, Asc, Desc
 from redis.commands.search.commands import Query
 from redis.commands.search.field import TextField, TagField
-from redis.commands.search.indexDefinition import IndexDefinition
+from redis.commands.search.indexDefinition import IndexDefinition, IndexType
 
 REDIS_HOST = environ.get('REDIS_HOST') or 'localhost'
 REDIS_PORT = environ.get('REDIS_PORT') or '6379'
@@ -16,13 +16,14 @@ REDIS_CONSUMER_GROUP = environ.get('REDIS_CONSUMER_GROUP') or 'testgroup'
 REDIS_STREAM_NAME = environ.get('REDIS_STREAM_NAME') or 'test'
 
 LOG_SCHEMA = (
-    TextField("timestamp", sortable=True, no_stem=True),
-    TextField("hostname", sortable=True),
-    TagField("log_level"),
-    TextField("message")
+    TextField("$.timestamp", as_name="timestamp", sortable=True, no_stem=True),
+    TextField("$.hostname", as_name="hostname", sortable=True),
+    TagField("$.log_level", as_name="log_level"),
+    TextField("$.message", as_name="message")
 )
 
 LOG_PREFIX = ["logs:"]
+IDX_NAME = "jsonIdx"
 
 redisconn = redis.Redis(
     host=REDIS_HOST,
@@ -31,7 +32,7 @@ redisconn = redis.Redis(
 )
 
 client = redisconn.ft(
-    index_name='logIdx',
+    index_name=IDX_NAME,
 )
 
 def create_index(
@@ -40,7 +41,10 @@ def create_index(
     ):
     """ Create index if it doesn't exist. """
 
-    definition = IndexDefinition(prefix=idx_prefix)
+    definition = IndexDefinition(
+        prefix=idx_prefix,
+        index_type=IndexType.JSON
+        )
     try:
         client.info()
     except redis.exceptions.ResponseError:
@@ -53,7 +57,7 @@ def search_index(query: str, limit: int = 100):
     count = 0
     while True:
         request = Query(f"{query}").sort_by("timestamp", asc=False).paging(count, 100).highlight()
-        literal_query = f"FT.SEARCH logIdx \"{request.query_string()}\" {' '.join([str(x) for x in request.get_args()[1:]])}"
+        literal_query = f"FT.SEARCH {IDX_NAME} \"{request.query_string()}\" {' '.join([str(x) for x in request.get_args()[1:]])}"
         res = client.search(request)
         yield res, literal_query
         count += 100
@@ -68,7 +72,7 @@ def aggregate_by_field(query: str, field: str):
         f"@{field}",
         reducers.count().alias("entries")
     ).sort_by(Desc("@entries"))
-    literal_query = f"FT.AGGREGATE logIdx \"{request.build_args()[0]}\" {' '.join([str(x) for x in request.build_args()[1:]])}"
+    literal_query = f"FT.AGGREGATE {IDX_NAME} \"{request.build_args()[0]}\" {' '.join([str(x) for x in request.build_args()[1:]])}"
     res = None
     while True:
         res = client.aggregate(request)
@@ -87,7 +91,7 @@ if __name__ == '__main__':
     duration = 0
     for result, rawquery in search_index("%hrre%", 100):
         for subres in result.docs:
-            print(subres.message)
+            print(subres.json)
             print(result.total)
             counter += 1
         duration += result.duration

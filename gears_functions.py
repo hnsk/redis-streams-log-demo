@@ -1,8 +1,11 @@
 SPLIT_BY_SEVERITY = """
+import json
 from datetime import datetime
 STREAM_NAME = "test"
+LOG_PREFIX = "logs"
 
-def split_by_severity(id, event):
+def split_by_severity(id, payload):
+    event = json.loads(payload["json"])
     severity_stream = f"{event['log_level'].lower()}"
     beginning_of_today = datetime.today().date().strftime('%s')
     execute(
@@ -12,14 +15,8 @@ def split_by_severity(id, event):
         '~',
         2000000,
         '*',
-        'timestamp',
-        event['timestamp'],
-        'hostname',
-        event['hostname'],
-        'log_level',
-        event['log_level'],
-        'message',
-        event['message']
+        'json',
+        payload["json"]
     )
     execute(
         'ZINCRBY',
@@ -28,16 +25,10 @@ def split_by_severity(id, event):
         severity_stream
     )
     execute(
-        'HSET',
-        f"logs:{beginning_of_today}:{id}",
-        'timestamp',
-        event['timestamp'],
-        'hostname',
-        event['hostname'],
-        'log_level',
-        event['log_level'],
-        'message',
-        event['message']
+        'JSON.SET',
+        f"{LOG_PREFIX}:{beginning_of_today}:{id}",
+        '$',
+        payload["json"]
     )
 
 gb = GearsBuilder('StreamReader')
