@@ -2,10 +2,13 @@
 
 from os import environ
 from typing import List, Tuple
-from redis import ResponseError
-from redisearch import Client, Query, reducers
-from redisearch.aggregation import AggregateRequest, Asc, Desc
-from redisearch.client import IndexDefinition, TagField, TextField
+import redis
+
+from redis.commands.search import reducers
+from redis.commands.search.aggregation import AggregateRequest, Asc, Desc
+from redis.commands.search.commands import Query
+from redis.commands.search.field import TextField, TagField
+from redis.commands.search.indexDefinition import IndexDefinition
 
 REDIS_HOST = environ.get('REDIS_HOST') or 'localhost'
 REDIS_PORT = environ.get('REDIS_PORT') or '6379'
@@ -21,10 +24,14 @@ LOG_SCHEMA = (
 
 LOG_PREFIX = ["logs:"]
 
-client = Client(
-    'logIdx',
+redisconn = redis.Redis(
     host=REDIS_HOST,
-    port=REDIS_PORT
+    port=REDIS_PORT,
+    decode_responses=True
+)
+
+client = redisconn.ft(
+    index_name='logIdx',
 )
 
 def create_index(
@@ -36,7 +43,7 @@ def create_index(
     definition = IndexDefinition(prefix=idx_prefix)
     try:
         client.info()
-    except  ResponseError:
+    except redis.exceptions.ResponseError:
         client.create_index(idx_schema, definition=definition)
     
 
@@ -72,13 +79,13 @@ def aggregate_by_field(query: str, field: str):
 
 if __name__ == '__main__':
     create_index()
-    for result in aggregate_by_field("log_level"):
+    for result, rawquery in aggregate_by_field("*", "log_level"):
         for row in result.rows:
             print(row)
 
     counter = 0
     duration = 0
-    for result in search_index("%hrre%", 100):
+    for result, rawquery in search_index("%hrre%", 100):
         for subres in result.docs:
             print(subres.message)
             print(result.total)
