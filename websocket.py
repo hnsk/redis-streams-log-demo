@@ -6,6 +6,7 @@ from time import time
 from pydantic import BaseModel
 
 import aioredis
+import aiohttp
 
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -293,10 +294,16 @@ async def generate_messages(
 @app.get("/search", response_class=HTMLResponse)
 async def get_search(request: Request):
     """ Return RediSearch template page. """
+    async with aiohttp.ClientSession() as session:
+        async with session.get('http://redisinsight:8001/api/instance/') as response:
+            ri_db = await response.json()
+            ri_db = ri_db["dbs"][0]["id"]
+
     return templates.TemplateResponse("search.html", {
         "request": request,
         "host": "127.0.0.1",
-        "port": 8000
+        "port": 8000,
+        "ri_db": ri_db
         })
 
 class SearchQuery(BaseModel):
@@ -322,7 +329,9 @@ def search_string(query: SearchQuery):
             results['duration'] += res.duration
             results['literal_query'] = literal_query
             for doc in res.docs:
-                results['messages'].append(json.loads(doc.json))
+                message = json.loads(doc.json)
+                message["id"] = doc.id
+                results['messages'].append(message)
     except ResponseError:
         print(f"invalid query {query.query}")
         results['error'] = f"Invalid query {query.query}"
