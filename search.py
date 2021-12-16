@@ -56,7 +56,19 @@ def search_index(query: str, limit: int = 100):
 
     count = 0
     while True:
-        request = Query(f"{query}").sort_by("timestamp", asc=False).paging(count, 100).highlight()
+        request = (
+            Query(f"{query}")
+            .sort_by("timestamp", asc=False)
+            .paging(count, 100)
+            .highlight()
+            .return_fields(
+                "timestamp",
+                "hostname",
+                "log_level",
+                "message"
+            )
+        )
+
         literal_query = f"FT.SEARCH {IDX_NAME} \"{request.query_string()}\" {' '.join([str(x) for x in request.get_args()[1:]])}"
         res = client.search(request)
         yield res, literal_query
@@ -68,10 +80,17 @@ def search_index(query: str, limit: int = 100):
 def aggregate_by_field(query: str, field: str):
     """ Aggregate counts for query and group by field. """
 
-    request = AggregateRequest(query).group_by(
-        f"@{field}",
-        reducers.count().alias("entries")
-    ).sort_by(Desc("@entries"))
+    request = (
+        AggregateRequest(query)
+        .group_by(
+            f"@{field}",
+            reducers
+            .count()
+            .alias("entries")
+        )
+        .sort_by(Desc("@entries"))
+    )
+
     literal_query = f"FT.AGGREGATE {IDX_NAME} \"{request.build_args()[0]}\" {' '.join([str(x) for x in request.build_args()[1:]])}"
     res = None
     while True:
@@ -91,7 +110,8 @@ if __name__ == '__main__':
     duration = 0
     for result, rawquery in search_index("%hrre%", 100):
         for subres in result.docs:
-            print(subres.json)
+            print(subres.id)
+            print(subres.message)
             print(result.total)
             counter += 1
         duration += result.duration

@@ -329,9 +329,13 @@ def search_string(query: SearchQuery):
             results['duration'] += res.duration
             results['literal_query'] = literal_query
             for doc in res.docs:
-                message = json.loads(doc.json)
-                message["id"] = doc.id
-                results['messages'].append(message)
+               results['messages'].append({
+                   "id": doc.id,
+                    "hostname": doc.hostname,
+                    "timestamp": doc.timestamp,
+                    "message": doc.message,
+                    "log_level": doc.log_level
+                })
     except ResponseError:
         print(f"invalid query {query.query}")
         results['error'] = f"Invalid query {query.query}"
