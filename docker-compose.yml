@@ -11,6 +11,7 @@ services:
       - "redis"
     links:
       - "redis:redis"
+      - "redisinsight:redisinsight"
     ports:
       - "8000:8000"
     environment:

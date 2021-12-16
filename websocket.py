@@ -1,10 +1,12 @@
 import asyncio
+import json
 from dataclasses import dataclass
 from os import environ
 from time import time
 from pydantic import BaseModel
 
 import aioredis
+import aiohttp
 
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -243,7 +245,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int):
                 for contents in data:
                     await manager.send_client_json({
                         'type': 'message',
-                        'data': contents},
+                        'data': json.loads(contents["json"])},
                         client_id)
     except (ConnectionClosedOK, ConnectionClosedError):
         print(f"{client_id} disconnected")
@@ -292,10 +294,16 @@ async def generate_messages(
 @app.get("/search", response_class=HTMLResponse)
 async def get_search(request: Request):
     """ Return RediSearch template page. """
+    async with aiohttp.ClientSession() as session:
+        async with session.get('http://redisinsight:8001/api/instance/') as response:
+            ri_db = await response.json()
+            ri_db = ri_db["dbs"][0]["id"]
+
     return templates.TemplateResponse("search.html", {
         "request": request,
         "host": "127.0.0.1",
-        "port": 8000
+        "port": 8000,
+        "ri_db": ri_db
         })
 
 class SearchQuery(BaseModel):
@@ -321,7 +329,8 @@ def search_string(query: SearchQuery):
             results['duration'] += res.duration
             results['literal_query'] = literal_query
             for doc in res.docs:
-                results['messages'].append({
+               results['messages'].append({
+                   "id": doc.id,
                     "hostname": doc.hostname,
                     "timestamp": doc.timestamp,
                     "message": doc.message,

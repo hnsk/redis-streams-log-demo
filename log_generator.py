@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import json
 from datetime import datetime
 from random import choice, choices, randint
 from time import time, sleep
@@ -48,10 +49,10 @@ def random_message():
 
 async def add_message(r, stream="test"):
     """ Add log message to Redis stream. """
-    message = random_message()
+    message = json.dumps(random_message())
     ret = await r.xadd(
         name=stream,
-        fields=message,
+        fields={"json": message},
         maxlen=200000,
         approximate=True
     )

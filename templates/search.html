@@ -248,20 +248,23 @@
             document.getElementById("query_string").innerHTML = `<pre>${search_results.literal_query}</pre>`;
             for (row in search_results.messages) {
                 data = search_results.messages[row]
-                //console.log(data.hostname)
                 var newRow = table.insertRow()
-                var cell1 = newRow.insertCell(0)
-                var cell2 = newRow.insertCell(1)
-                var cell3 = newRow.insertCell(2)
-                var cell4 = newRow.insertCell(3)
-                cell1.innerHTML = data.timestamp
-                cell2.innerHTML = data.log_level
-                cell2.className = data.log_level.toLowerCase()
-                cell3.innerHTML = data.hostname
-                cell4.innerHTML = data.message
-                // if (document.getElementById("log").rows.length > 25) {
-                //    table.deleteRow(-1)
-                // }
+                var cell0 = newRow.insertCell(0)
+                var cell1 = newRow.insertCell(1)
+                var cell2 = newRow.insertCell(2)
+                var cell3 = newRow.insertCell(3)
+                // gitpod uses standard ports and appends the actual ports to the hostname
+                if (window.location.hostname.match(/gitpod.io$/)) {
+                    cell0.innerHTML = `<a href="https://${window.location.hostname.replace("8000", "8001")}/instance/{{ ri_db }}/browser/?db=0&key=${data.id}">${data.timestamp}</a>`
+                } else if (location.protocol !== 'https:') {
+                    cell0.innerHTML = `<a href="http://${window.location.hostname}:8001/instance/{{ ri_db }}/browser/?db=0&key=${data.id}">${data.timestamp}</a>`
+                } else {
+                    cell0.innerHTML = `<a href="https://${window.location.hostname}:8001/instance/{{ ri_db }}/browser/?db=0&key=${data.id}">${data.timestamp}</a>`
+                }
+                cell1.innerHTML = data.log_level
+                cell1.className = data.log_level.toLowerCase()
+                cell2.innerHTML = data.hostname
+                cell3.innerHTML = data.message
             }
         }
 
