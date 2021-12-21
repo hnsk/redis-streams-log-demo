@@ -22,6 +22,13 @@ pip install -r requirements.txt
 # to run
 uvicorn websocket:app
 ```
+
+# Gitpod
+You can also spawn the deployment on https://gitpod.io/
+
+https://gitpod.io/#https://github.com/hnsk/redis-streams-log-demo
+
+
 ### Usage
 
 Connect to http://yourhost:8000 and generate some logs.
