@@ -158,6 +158,13 @@ def shutdown_event() -> None:
     for client_id in manager.active_connections:
         manager.disconnect(client_id)
 
+@app.get("/clientid", response_class=JSONResponse)
+async def get_clientid():
+    """ Return new client ID. """
+    r = aioredis.Redis(connection_pool=rpool)
+    client_id = await r.incrby("consumerids", 1)
+    return JSONResponse(content={"response": "ok", "client_id": client_id})
+
 @app.get("/", response_class=HTMLResponse)
 async def get_index(request: Request):
     """ Index page. """
