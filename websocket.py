@@ -5,12 +5,13 @@ from os import environ
 from time import time
 from pydantic import BaseModel
 
+import redis
 import aioredis
 import aiohttp
 
 from fastapi import FastAPI, Request, WebSocket
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from redis import ResponseError
 from websockets.exceptions import ConnectionClosedOK, ConnectionClosedError
 
@@ -19,7 +20,7 @@ import gears_functions
 import search
 
 REDIS_HOST = environ.get('REDIS_HOST') or 'localhost'
-REDIS_PORT = environ.get('REDIS_PORT') or '6379'
+REDIS_PORT = int(environ.get('REDIS_PORT') or '6379')
 REDIS_CONSUMER_GROUP = environ.get('REDIS_CONSUMER_GROUP') or 'testgroup'
 REDIS_STREAM_NAME = environ.get('REDIS_STREAM_NAME') or 'test'
 
@@ -41,19 +42,25 @@ class WebsocketClientConnection:
 
 # Create FastAPI app instance
 app = FastAPI()
-templates = Jinja2Templates(directory="templates")
 
-# Create connection pool for Redis
-rpool = aioredis.ConnectionPool(
+# Create asynchronous connection pool for Redis
+aiorpool = aioredis.ConnectionPool(
     host=REDIS_HOST,
     port=REDIS_PORT,
     decode_responses=True)
+
+# Create synchronous connection pool for Redis
+rpool = redis.Redis(
+    host=REDIS_HOST,
+    port=REDIS_PORT,
+    decode_responses=True
+)
 
 class ConnectionManager:
     """ Class for managing WebSocket connections"""
     def __init__(self):
         self.active_connections: dict = {}
-        self.rconn = aioredis.Redis(connection_pool=rpool)
+        self.rconn = aioredis.Redis(connection_pool=aiorpool)
         self.available_streams = {}
         self.splitter_active = False
 
@@ -128,7 +135,7 @@ manager = ConnectionManager()
 @app.on_event("startup")
 async def startup_event():
     """ Initialise Redis database on server startup. """
-    r = aioredis.Redis(connection_pool=rpool)
+    r = aioredis.Redis(connection_pool=aiorpool)
 
     # Remove old consumer IDs and severities if they exist.
     await r.delete("consumerids")
@@ -151,6 +158,10 @@ async def startup_event():
         mkstream = True
     )
 
+    log_generator.init_config()
+    search.autocomplete_delete("autocomplete")
+    search.autocomplete_add_defaults()
+
 @app.on_event("shutdown")
 def shutdown_event() -> None:
     """ Disconnect all active connections on shutdown. """
@@ -158,34 +169,17 @@ def shutdown_event() -> None:
     for client_id in manager.active_connections:
         manager.disconnect(client_id)
 
-@app.get("/clientid", response_class=JSONResponse)
+@app.get("/api/clientid", response_class=JSONResponse)
 async def get_clientid():
     """ Return new client ID. """
-    r = aioredis.Redis(connection_pool=rpool)
+    r = aioredis.Redis(connection_pool=aiorpool)
     client_id = await r.incrby("consumerids", 1)
     return JSONResponse(content={"response": "ok", "client_id": client_id})
 
-@app.get("/", response_class=HTMLResponse)
-async def get_index(request: Request):
-    """ Index page. """
-    r = aioredis.Redis(connection_pool=rpool)
-    client_id = await r.incrby("consumerids", 1)
-    return templates.TemplateResponse("websockets.html", {
-        "request": request,
-        "host": "127.0.0.1",
-        "port": 8000,
-        "client_id": client_id})
-
-@app.get("/generate/{n}", response_class=HTMLResponse)
-async def generate(request: Request, n: int):
-    """ Call log generator to generate n log messages to stream. """
-    await generate_messages(n=n, stream=REDIS_STREAM_NAME)
-    return f"Generated {n} log entries"
-
-@app.get("/streams/splitter", response_class=JSONResponse)
+@app.get("/api/streams/splitter", response_class=JSONResponse)
 async def register_stream_splitter():
     """ Register Redis Gears function to split stream to severities. """
-    r = aioredis.Redis(connection_pool=rpool)
+    r = aioredis.Redis(connection_pool=aiorpool)
 
     # Trim all old entries from the stream before registration.
     print(f"Trimming {REDIS_STREAM_NAME} before registering Gears function")
@@ -204,19 +198,19 @@ async def register_stream_splitter():
     manager.activate_splitter()
     return JSONResponse(content={"response": "ok"})
 
-@app.get("/streams/update", response_class=JSONResponse)
+@app.get("/api/streams/update", response_class=JSONResponse)
 async def update_streams():
     """ Update available streams for all clients. """
     streams = await manager.update_available_streams()
     return JSONResponse(content=streams)
 
-@app.get("/streams/{client_id}/add/{stream}", response_class=JSONResponse)
+@app.get("/api/streams/{client_id}/add/{stream}", response_class=JSONResponse)
 def add_stream_to_client(client_id: int, stream: str):
     """ Add stream subscription to client. """
     manager.active_connections[client_id].add_stream(stream)
     return JSONResponse(content={"response": "ok"})
 
-@app.get("/streams/{client_id}/del/{stream}", response_class=JSONResponse)
+@app.get("/api/streams/{client_id}/del/{stream}", response_class=JSONResponse)
 def del_stream_from_client(client_id: int, stream: str):
     """ Delete stream subscription from a client. """
     manager.active_connections[client_id].remove_stream(stream)
@@ -261,7 +255,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int):
 async def read_streams(client_id: str):
     """ Read entries from subscribed streams for client_id. """
 
-    r = aioredis.Redis(connection_pool=rpool)
+    r = aioredis.Redis(connection_pool=aiorpool)
     consumername = f"consumer-{client_id}"
     if client_id in manager.active_connections and len(manager.active_connections[client_id].streams) > 0:
         response = []
@@ -288,36 +282,13 @@ async def read_streams(client_id: str):
             pass
         return response
 
-async def generate_messages(
-    stream: str = REDIS_STREAM_NAME,
-    n: int = 100
-    ):
-    """ Call log generator to generate n messages to stream. """
-    r = aioredis.Redis(connection_pool=rpool)
-    for _ in range(n):
-        await log_generator.add_message(r, stream)
-
-
-@app.get("/search", response_class=HTMLResponse)
-async def get_search(request: Request):
-    """ Return RediSearch template page. """
-    async with aiohttp.ClientSession() as session:
-        async with session.get('http://redisinsight:8001/api/instance/') as response:
-            ri_db = await response.json()
-            ri_db = ri_db["dbs"][0]["id"]
-
-    return templates.TemplateResponse("search.html", {
-        "request": request,
-        "host": "127.0.0.1",
-        "port": 8000,
-        "ri_db": ri_db
-        })
+### Search routes
 
 class SearchQuery(BaseModel):
     """ Search query definition. Accepted parameters are a query string. """
     query: str
 
-@app.post("/search", response_class=JSONResponse)
+@app.post("/api/search", response_class=JSONResponse)
 def search_string(query: SearchQuery):
     """ Search string from logs and return results and information. """
 
@@ -359,7 +330,7 @@ class AggregateQuery(BaseModel):
     query: str
     field: str
 
-@app.post("/search/aggregate", response_class=JSONResponse)
+@app.post("/api/search/aggregate", response_class=JSONResponse)
 def search_aggregate_by_fields(query: AggregateQuery):
     """ Aggregate log severities based on the provided query. """
 
@@ -382,3 +353,113 @@ def search_aggregate_by_fields(query: AggregateQuery):
         result["error"] = f"Invalid query {query.query}"
 
     return JSONResponse(result)
+
+class SuggestionQuery(BaseModel):
+    index: str
+    prefix: str
+
+@app.post("/api/search/suggestion/get", response_class=JSONResponse)
+def get_autocomplete_suggestion(query: SuggestionQuery):
+    ret = search.autocomplete_suggestion_get(query.index, query.prefix)
+    return JSONResponse(ret)
+
+class TagValsQuery(BaseModel):
+    field: str
+
+@app.post("/api/search/tagvals/get", response_class=JSONResponse)
+def get_tagvals(query: TagValsQuery):
+    ret = search.get_tagvals(query.field)
+    return JSONResponse(ret)
+
+
+### Generator routes
+
+@app.get("/api/generate/{n}", response_class=JSONResponse)
+async def generate(request: Request, n: int):
+    """ Call log generator to generate n log messages to stream. """
+    await generate_messages(n=n, stream=REDIS_STREAM_NAME)
+    return f"Generated {n} log entries"
+
+async def generate_messages(
+    stream: str = REDIS_STREAM_NAME,
+    n: int = 100
+    ):
+    """ Call log generator to generate n messages to stream. """
+    r = aioredis.Redis(connection_pool=aiorpool)
+    for _ in range(n):
+        await log_generator.add_message(r, stream)
+
+@app.get("/api/generator/config", response_class=JSONResponse)
+def get_generator_config():
+    """ Return new client ID. """
+    r = aioredis.Redis(connection_pool=aiorpool)
+    config = log_generator.get_config()
+    return JSONResponse(content={"response": "ok", "config": config})
+
+class GeneratorMessageAdd(BaseModel):
+    hostidx: int
+    message: str
+
+@app.post("/api/generator/message/add", response_class=JSONResponse)
+def generator_message_add(query: GeneratorMessageAdd):
+    ret = log_generator.add_message_to_host(query.hostidx, query.message)
+    return JSONResponse(ret)
+
+class GeneratorMessageDelete(BaseModel):
+    hostidx: int
+    msgidx: int
+
+@app.post("/api/generator/message/delete", response_class=JSONResponse)
+def generator_message_delete(query: GeneratorMessageDelete):
+    ret = log_generator.delete_message_from_host(query.hostidx, query.msgidx)
+    return JSONResponse(ret)
+
+class GeneratorMessageModify(BaseModel):
+    hostidx: int
+    msgidx: int
+    message: str
+
+@app.post("/api/generator/message/modify", response_class=JSONResponse)
+def generator_message_modify(query: GeneratorMessageModify):
+    ret = log_generator.modify_message_on_host(query.hostidx, query.msgidx, query.message)
+    return JSONResponse(ret)
+
+class GeneratorConfig(BaseModel):
+    config: list
+
+@app.post("/api/generator/config/update", response_class=JSONResponse)
+def generator_config_write(query: GeneratorConfig):
+    ret = log_generator.write_config(query.config)
+    return JSONResponse(ret)
+
+class GeneratorHostOptions(BaseModel):
+    hostname: str
+    enabled: bool
+    amount: int
+
+class GeneratorHostAdd(BaseModel):
+    name: str
+    options: GeneratorHostOptions
+    messages: list[str]
+
+@app.post("/api/generator/host/add", response_class=JSONResponse)
+def generator_host_add(query: GeneratorHostAdd):
+    ret = log_generator.add_host(query.dict())
+    return JSONResponse(ret)
+
+
+### Log event modification routes
+
+class LogMessage(BaseModel):
+    key: str
+    field: str
+    value: str
+
+@app.post("/api/log/message/modify", response_class=JSONResponse)
+def log_message_modify(query: LogMessage):
+    ret = rpool.json().set(query.key, f"$.{query.field}", query.value)
+    return ret
+
+### Finally mount static files
+
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
