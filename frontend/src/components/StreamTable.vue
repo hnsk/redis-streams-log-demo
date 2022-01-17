@@ -28,10 +28,6 @@ import store from '../store'
 
 export default {
     setup() {
-        function getLogLevelClass(val) {
-            return val.toLowerCase()
-        }
-
         const levelColors = {
             debug: "blue-2",
             info: "info",
@@ -49,7 +45,10 @@ export default {
             ]
         })
 
-        onMounted(store.dispatch('setClientID'))
+        if (!(store.state.client_id)) {
+            //console.log(store.state.client_id)
+            onMounted(store.dispatch('setClientID'))
+        }
 
         return {
             data,

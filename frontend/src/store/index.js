@@ -5,7 +5,7 @@ import { api } from 'boot/axios'
 export default createStore({
     state: {
       message_counter: 0,
-      client_id: 1,
+      client_id: null,
       stream_websocket: null,
       message_keys: {},
       messages: []
@@ -48,11 +48,12 @@ export default createStore({
       setClientID({dispatch, commit}) {
         api.get('api/clientid')
           .then((response) => {
-            commit('setClientID', response.data.client_id);
-            dispatch('checkStreamWebSocket',response.data.client_id )
+            commit('setClientID', response.data.client_id)
+            dispatch('checkStreamWebSocket', response.data.client_id )
           })
       },
       checkStreamWebSocket({commit, state}, id) {
+        console.log("client_id: ", id)
         if (location.protocol !== 'https:') {
           commit('setStreamWebSocket', new WebSocket(`ws://${window.location.host}/ws/${id}`))
         }
