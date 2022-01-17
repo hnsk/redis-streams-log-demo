@@ -53,7 +53,6 @@ export default createStore({
           })
       },
       checkStreamWebSocket({commit, state}, id) {
-        commit('resetMessages')
         if (location.protocol !== 'https:') {
           commit('setStreamWebSocket', new WebSocket(`ws://${window.location.host}/ws/${id}`))
         }
