@@ -1,115 +1,117 @@
 <template>
-    <div class="q-gutter-md q-pa-md">
-        <div class="col-4">
-            <q-select
-                use-input
-                fill-input
-                hide-dropdown-icon
-                hide-selected
-                :model-value="search_string"
-                :options="searchOptions"
-                transition-duration=0
-                input-debounce=0
-                @input-value="(value) => search_string = value"
-                @filter="getAutocompleteOptions"
-                label="Search logs"
-                style="width: 50%">
-                <template v-slot:after>
-                    <q-btn round dense flat icon="clear" color="primary" @click="search_string = '*'" />
-                </template>
-            </q-select>
-        </div>
-    </div>
-    <div class="row q-pa-md">
-        <div class="col-3">
-            <q-table
-                title="Aggregates"
-                dense
-                :rows="aggregates"
-                :columns="aggregate_columns"
-                :hide-pagination="true"
-                row-key="field"
-                :pagination="{rowsPerPage: 0}"
-            />
-        </div>
-        <div class="col-7">
-            <q-banner class="bg-grey-9 text-white q-ma-md text-weight-bold codebox">
-                {{ literal_aggregate_query }}
-                <q-tooltip>Literal aggregate query</q-tooltip>
-            </q-banner>
-            <q-banner class="bg-grey-9 text-white q-ma-md text-weight-bold codebox">
-                {{ literal_search_query }}
-                <q-tooltip>Literal search query</q-tooltip>
-            </q-banner>
-        </div>
-    </div>
-    <div class="q-pa-md">
-        <q-table
-            :title="`Results: ${num_results} (of ${total_results}) in ${search_duration}ms`"
-            dense
-            :rows="messages"
-            :columns="search_columns"
-            hide-pagination
-            row-key="id"
-            :pagination="{rowsPerPage: 0}"
-            virtual-scroll
-            class="fit"
-        >
-        <template v-slot:body-cell="props">
-            <q-td :props="props">
-            <div v-if="props.col.name == 'log_level'">
+    <div>
+        <div class="q-gutter-md q-pa-md">
+            <div class="col-4">
                 <q-select
-                    v-model="messages[props.pageIndex].log_level"
-                    dense
-                    outlined
-                    :bg-color="levelColors[props.value.toLowerCase()].bg"
-                    :options="logLevels"
+                    use-input
+                    fill-input
                     hide-dropdown-icon
+                    hide-selected
+                    :model-value="search_string"
+                    :options="searchOptions"
                     transition-duration=0
-                    @update:model-value="updateLogKey(props.key, props.col.name, messages[props.pageIndex].log_level)"
-                />
-
+                    input-debounce=0
+                    @input-value="(value) => search_string = value"
+                    @filter="getAutocompleteOptions"
+                    label="Search logs"
+                    style="width: 50%">
+                    <template v-slot:after>
+                        <q-btn round dense flat icon="clear" color="primary" @click="search_string = '*'" />
+                    </template>
+                </q-select>
             </div>
-            <div v-else-if="props.col.name == 'message'">
-                <div style="font-family: monospace">{{ props.value }}</div>
-                <q-popup-edit
-                    v-model="messages[props.pageIndex].message"
-                    auto-save
-                    v-slot="scope"
-                    @before-hide="updateLogKey(props.key, props.col.name, messages[props.pageIndex].message)"
-                >
-                    <q-input
+        </div>
+        <div class="row q-pa-md">
+            <div class="col-3">
+                <q-table
+                    title="Aggregates"
+                    dense
+                    :rows="aggregates"
+                    :columns="aggregate_columns"
+                    :hide-pagination="true"
+                    row-key="field"
+                    :pagination="{rowsPerPage: 0}"
+                />
+            </div>
+            <div class="col-7">
+                <q-banner class="bg-grey-9 text-white q-ma-md text-weight-bold codebox">
+                    {{ literal_aggregate_query }}
+                    <q-tooltip>Literal aggregate query</q-tooltip>
+                </q-banner>
+                <q-banner class="bg-grey-9 text-white q-ma-md text-weight-bold codebox">
+                    {{ literal_search_query }}
+                    <q-tooltip>Literal search query</q-tooltip>
+                </q-banner>
+            </div>
+        </div>
+        <div class="q-pa-md">
+            <q-table
+                :title="`Results: ${num_results} (of ${total_results}) in ${search_duration}ms`"
+                dense
+                :rows="messages"
+                :columns="search_columns"
+                hide-pagination
+                row-key="id"
+                :pagination="{rowsPerPage: 0}"
+                virtual-scroll
+                class="fit"
+            >
+            <template v-slot:body-cell="props">
+                <q-td :props="props">
+                <div v-if="props.col.name == 'log_level'">
+                    <q-select
+                        v-model="messages[props.pageIndex].log_level"
+                        dense
+                        outlined
+                        :bg-color="levelColors[props.value.toLowerCase()].bg"
+                        :options="logLevels"
+                        hide-dropdown-icon
+                        transition-duration=0
+                        @update:model-value="updateLogKey(props.key, props.col.name, messages[props.pageIndex].log_level)"
+                    />
+
+                </div>
+                <div v-else-if="props.col.name == 'message'">
+                    <div style="font-family: monospace">{{ props.value }}</div>
+                    <q-popup-edit
+                        v-model="messages[props.pageIndex].message"
+                        auto-save
+                        v-slot="scope"
+                        @before-hide="updateLogKey(props.key, props.col.name, messages[props.pageIndex].message)"
+                    >
+                        <q-input
+                            v-model="scope.value"
+                            dense
+                            autofocus
+                            @keyup.enter="scope.set() ; updateLogKey(props.key, props.col.name, scope.value);"
+                        />
+                    </q-popup-edit>
+                </div>
+                <div v-else-if="props.col.name == 'hostname'">
+                    {{ props.value }}
+                    <q-popup-edit
+                        v-model="messages[props.pageIndex].hostname"
+                        auto-save
+                        v-slot="scope"
+                        @before-hide="updateLogKey(props.key, props.col.name, messages[props.pageIndex].hostname)"
+                    >
+                        <q-input
                         v-model="scope.value"
                         dense
                         autofocus
                         @keyup.enter="scope.set() ; updateLogKey(props.key, props.col.name, scope.value);"
                     />
-                </q-popup-edit>
-            </div>
-            <div v-else-if="props.col.name == 'hostname'">
-                {{ props.value }}
-                <q-popup-edit
-                    v-model="messages[props.pageIndex].hostname"
-                    auto-save
-                    v-slot="scope"
-                    @before-hide="updateLogKey(props.key, props.col.name, messages[props.pageIndex].hostname)"
-                >
-                    <q-input
-                    v-model="scope.value"
-                    dense
-                    autofocus
-                    @keyup.enter="scope.set() ; updateLogKey(props.key, props.col.name, scope.value);"
-                />
-                </q-popup-edit>
-            </div>
-            <div v-else-if="props.col.name == 'timestamp'">
-                {{ props.value }}
-                {{ props.row.timestamp }}
+                    </q-popup-edit>
                 </div>
-            </q-td>
-        </template>
-        </q-table>
-  </div>
+                <div v-else-if="props.col.name == 'timestamp'">
+                    {{ props.value }}
+                    {{ props.row.timestamp }}
+                    </div>
+                </q-td>
+            </template>
+            </q-table>
+        </div>
+    </div>
 </template>
 
 <script>
