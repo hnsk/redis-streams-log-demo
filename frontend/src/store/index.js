@@ -1,14 +1,15 @@
 import { createStore } from 'vuex'
 import { api } from 'boot/axios'
 
-
 export default createStore({
     state: {
       message_counter: 0,
       client_id: null,
       stream_websocket: null,
       message_keys: {},
-      messages: []
+      messages: [],
+      redis_keys: 0,
+      redis_used_memory: 0
     },
     getters: {
     },
@@ -42,6 +43,12 @@ export default createStore({
           state.stream_websocket.close()
         }
         state.stream_websocket = websocket
+      },
+      setRedisKeys(state, keys) {
+        state.redis_keys = keys
+      },
+      setRedisUsedMemory(state, used_memory) {
+        state.redis_used_memory = used_memory
       }
     },
     actions: {
@@ -52,7 +59,11 @@ export default createStore({
             dispatch('checkStreamWebSocket', response.data.client_id )
           })
       },
-      checkStreamWebSocket({commit, state}, id) {
+      setRedisStats({commit}, info) {
+        commit('setRedisKeys', info.db0.keys)
+        commit('setRedisUsedMemory', info.used_memory_human)
+      },
+      checkStreamWebSocket({commit, dispatch, state}, id) {
         console.log("client_id: ", id)
         if (location.protocol !== 'https:') {
           commit('setStreamWebSocket', new WebSocket(`ws://${window.location.host}/ws/${id}`))
@@ -65,6 +76,7 @@ export default createStore({
           if (data.type === "ping") {
               console.log("got ping, sending pong")
               state.stream_websocket.send("pong")
+              dispatch('setRedisStats', data.data.redis_info)
           }
           else {
             commit('addMessage', data.data)

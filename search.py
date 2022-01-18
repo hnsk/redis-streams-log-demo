@@ -153,6 +153,9 @@ def main():
     print(autocomplete_suggestion_add("autocomplete", "male", 1))
     print(autocomplete_suggestion_get("autocomplete", "m"))
     print(get_tagvals("log_level"))
+    info = redisconn.info()
+    print(f"used_memory: {info['used_memory']}")
+    print(f"keys: {info['db0']['keys']}")
 
 if __name__ == '__main__':
     main()

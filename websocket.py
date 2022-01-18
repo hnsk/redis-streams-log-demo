@@ -56,6 +56,11 @@ rpool = redis.Redis(
     decode_responses=True
 )
 
+# Get INFO from redis
+async def get_redis_info():
+    r = aioredis.Redis(connection_pool=aiorpool)
+    return await r.info()
+
 class ConnectionManager:
     """ Class for managing WebSocket connections"""
     def __init__(self):
@@ -227,9 +232,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int):
             # Send ping every 5 seconds to make sure client connections
             # are still connected.
             if time() - 5 > last_keepalive:
+                redis_info = await get_redis_info()
                 await manager.send_client_json({
                     'type': 'ping',
-                    'data': {"timestamp": last_keepalive}},
+                    'data': {
+                        'timestamp': last_keepalive,
+                        'redis_info': redis_info
+                        }},
                     client_id)
                 await websocket.receive_text()
                 last_keepalive = time()
@@ -392,7 +401,6 @@ async def generate_messages(
 @app.get("/api/generator/config", response_class=JSONResponse)
 def get_generator_config():
     """ Return new client ID. """
-    r = aioredis.Redis(connection_pool=aiorpool)
     config = log_generator.get_config()
     return JSONResponse(content={"response": "ok", "config": config})
 
@@ -459,6 +467,12 @@ class LogMessage(BaseModel):
 def log_message_modify(query: LogMessage):
     ret = rpool.json().set(query.key, f"$.{query.field}", query.value)
     return ret
+
+
+### Misc routes
+@app.get("/api/redis/info", response_class=JSONResponse)
+async def redis_info():
+    return await get_redis_info()
 
 ### Finally mount static files
 

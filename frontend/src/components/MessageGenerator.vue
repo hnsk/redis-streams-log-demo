@@ -33,7 +33,7 @@ export default {
             api.get(`api/generate/${numMessages.value}`)
          }
 
-        return {
+         return {
             numMessages,
             generateMessages,
             store

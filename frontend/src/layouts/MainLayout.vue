@@ -11,6 +11,7 @@
           </q-toolbar-title>
           </div>
           <q-space />
+          <RedisStats />
           <MessageGenerator />
       </q-toolbar>
 
@@ -32,15 +33,18 @@
 <script>
 
 import MessageGenerator from '../components/MessageGenerator'
+import RedisStats from '../components/RedisStats.vue'
 
 export default {
   components: {
-    MessageGenerator
+    MessageGenerator,
+    RedisStats
   },
 
   setup() {
     return {
       MessageGenerator,
+      RedisStats
     }
   },
 }

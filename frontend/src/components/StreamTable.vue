@@ -46,7 +46,6 @@ export default {
         })
 
         if (!(store.state.client_id)) {
-            //console.log(store.state.client_id)
             onMounted(store.dispatch('setClientID'))
         }
 
