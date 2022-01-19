@@ -72,7 +72,7 @@
 
                 </div>
                 <div v-else-if="props.col.name == 'message'">
-                    <div style="font-family: monospace">{{ props.value }}</div>
+                    <div style="font-family: monospace"><span v-html="props.value" /></div>
                     <q-popup-edit
                         v-model="messages[props.pageIndex].message"
                         auto-save
@@ -88,7 +88,7 @@
                     </q-popup-edit>
                 </div>
                 <div v-else-if="props.col.name == 'hostname'">
-                    {{ props.value }}
+                    <span v-html="props.value" />
                     <q-popup-edit
                         v-model="messages[props.pageIndex].hostname"
                         auto-save
@@ -103,9 +103,14 @@
                     />
                     </q-popup-edit>
                 </div>
-                <div v-else-if="props.col.name == 'timestamp'">
+                <div
+                  v-else-if="props.col.name == 'timestamp'"
+                  @click="addTimestampToQuery(props.row.timestamp)"
+                >
                     {{ props.value }}
-                    {{ props.row.timestamp }}
+                    <q-btn :icon="time_range_selector ? 'arrow_right' : 'arrow_left'" flat>
+                        <q-tooltip>{{ time_range_selector ? 'Select beginning of range' : 'Select end of range' }}</q-tooltip>
+                    </q-btn>
                     </div>
                 </q-td>
             </template>
@@ -133,7 +138,7 @@ export default {
         let search_duration = ref(0)
         let literal_search_query = ref("")
         let literal_aggregate_query = ref("")
-
+        
         let searchParams = ref({
             showSearch: true
         })
@@ -179,13 +184,10 @@ export default {
             '%hllo% @hostname:123 @log_level:{warning|debug}'
         ]
 
-        // (val, row) => date.formatDate(val, 'YYYY-MM-DDTHH:mm:ss.SSSZ')
-
         const search_columns = [
             { name: 'timestamp', field: 'timestamp', label: 'Timestamp', align: "left", format: (val) => date.formatDate(parseInt(val), 'YYYY-MM-DD HH:mm:ss.SSS')},
             { name: 'hostname', field: 'hostname', label: 'Hostname', align: "left"},
             { name: 'log_level', field: 'log_level', label: 'Log Level', align: "center"},
-            //, classes: row => getLogLevelClass(row.log_level)},
             { name: 'message', field: 'message', label: 'Message', style: "width: 100%", align: "left"}
         ]
 
@@ -263,6 +265,29 @@ export default {
             })
         }
 
+        let time_range = ref([])
+        let time_range_selector = ref(true)
+        function addTimestampToQuery(timestamp) {
+            if (time_range.value.length < 2) {
+                time_range.value.push(timestamp)
+                time_range_selector.value = false
+                if (time_range.value.length == 2) {
+                    time_range_selector.value = true
+                    if (search_string.value == '*') {
+                        search_string.value =`@timestamp:[${time_range.value.join(" ")}]`
+                    }
+                    else {
+                        search_string.value = `${search_string.value} @timestamp:[${time_range.value.join(" ")}]`
+                    }
+                }
+            }
+            else {
+                time_range.value = [timestamp]
+            }
+            console.log(time_range.value)
+            console.log(search_string.value)
+        }
+
         onMounted(() => {
             searchLogs(search_string.value)
         })
@@ -285,7 +310,9 @@ export default {
             logLevels,
             searchParams,
             searchOptions,
-            getAutocompleteOptions
+            getAutocompleteOptions,
+            addTimestampToQuery,
+            time_range_selector
         }   
     }
 }

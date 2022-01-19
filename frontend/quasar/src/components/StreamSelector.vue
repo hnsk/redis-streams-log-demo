@@ -1,19 +1,21 @@
 <template>
-    <div class="q-pa-md q-gutter-lg">
-        <div>
-            <q-toggle
-                v-for="severity of Object.keys(available_streams)"
-                v-model="available_streams[severity]"
-                :label="severity"
-                :key="severity"
-                @click="updateSubscribedStreams"
-            />
+    <div>
+        <div class="q-pa-md q-gutter-lg">
+            <div>
+                <q-toggle
+                    v-for="severity of Object.keys(available_streams)"
+                    v-model="available_streams[severity]"
+                    :label="severity"
+                    :key="severity"
+                    @click="updateSubscribedStreams"
+                />
+            </div>
         </div>
-    </div>
-    <div class="q-pl-md q-gutter-sm">
-        <q-btn v-if="show_splitter" color="white" text-color="black" label="Register Stream Splitter" @click="registerStreamSplitter">
-            <q-tooltip>Registers a RedisGears function to parse log severities to different streams. Also stores streams to JSON documents for RediSearch indexing.</q-tooltip>
-        </q-btn>
+        <div class="q-pl-md q-gutter-sm">
+            <q-btn v-if="show_splitter" color="white" text-color="black" label="Register Stream Splitter" @click="registerStreamSplitter">
+                <q-tooltip>Registers a RedisGears function to parse log severities to different streams. Also stores streams to JSON documents for RediSearch indexing.</q-tooltip>
+            </q-btn>
+        </div>
     </div>
 </template>
 
