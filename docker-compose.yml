@@ -5,19 +5,63 @@ services:
     image: "redislabs/redismod:latest"
     ports:
       - "6379:6379"
-  streamsdemo:
-    build: .
+
+  mainapp:
+    build: ./mainapp
     depends_on:
       - "redis"
     links:
       - "redis:redis"
       - "redisinsight:redisinsight"
-    ports:
-      - "8000:8000"
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - PYTHONUNBUFFERED=1
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  loggenerator:
+    build: ./loggenerator
+    depends_on:
+      - "redis"
+    links:
+      - "redis:redis"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PYTHONUNBUFFERED=1
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  search:
+    build: ./search
+    depends_on:
+      - "redis"
+    links:
+      - "redis:redis"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PYTHONUNBUFFERED=1
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - "mainapp"
+      - "search"
+      - "loggenerator"
+    links:
+      - "mainapp:mainapp"
+      - "loggenerator:loggenerator"
+      - "search:search"
+    ports:
+      - 8000:80
+
   redisinsight:
     build: ./redisinsight
     depends_on:
