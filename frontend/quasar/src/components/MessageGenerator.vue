@@ -30,7 +30,7 @@ export default {
     setup() {
         let numMessages = ref(100)
         function generateMessages() {
-            api.get(`api/generate/${numMessages.value}`)
+            api.get(`api/generator/generate/${numMessages.value}`)
          }
 
          return {

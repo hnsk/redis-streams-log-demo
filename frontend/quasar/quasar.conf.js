@@ -77,11 +77,11 @@ module.exports = configure(function (ctx) {
     devServer: {
       proxy: {
         '/api': {
-          target: 'http://127.0.0.1:8000',
+          target: 'http://192.168.1.118:8000',
           changeOrigin: true
         },
         '/ws': {
-          target: 'ws://127.0.0.1:8000',
+          target: 'ws://192.168.1.118:8000',
           changeOrigin: true,
           ws: true
         }

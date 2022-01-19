@@ -7,17 +7,13 @@ from pydantic import BaseModel
 
 import redis
 import aioredis
-import aiohttp
 
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from redis import ResponseError
 from websockets.exceptions import ConnectionClosedOK, ConnectionClosedError
 
-import log_generator
 import gears_functions
-import search
 
 REDIS_HOST = environ.get('REDIS_HOST') or 'localhost'
 REDIS_PORT = int(environ.get('REDIS_PORT') or '6379')
@@ -163,10 +159,6 @@ async def startup_event():
         mkstream = True
     )
 
-    log_generator.init_config()
-    search.autocomplete_delete("autocomplete")
-    search.autocomplete_add_defaults()
-
 @app.on_event("shutdown")
 def shutdown_event() -> None:
     """ Disconnect all active connections on shutdown. """
@@ -291,189 +283,25 @@ async def read_streams(client_id: str):
             pass
         return response
 
-### Search routes
-
-class SearchQuery(BaseModel):
-    """ Search query definition. Accepted parameters are a query string. """
-    query: str
-
-@app.post("/api/search", response_class=JSONResponse)
-def search_string(query: SearchQuery):
-    """ Search string from logs and return results and information. """
-
-    # Make sure the index exists before querying.
-    search.create_index()
-
-    results = {}
-    results['total'] = 0
-    results['duration'] = 0
-    results['messages'] = []
-    results['literal_query'] = ""
-    results['error'] = ""
-    try:
-        for res, literal_query in search.search_index(query.query):
-            results['total'] = res.total
-            results['duration'] += res.duration
-            results['literal_query'] = literal_query
-            for doc in res.docs:
-               results['messages'].append({
-                   "id": doc.id,
-                    "hostname": doc.hostname,
-                    "timestamp": doc.timestamp,
-                    "message": doc.message,
-                    "log_level": doc.log_level
-                })
-    except ResponseError:
-        print(f"invalid query {query.query}")
-        results['error'] = f"Invalid query {query.query}"
-    results['duration'] = f"{results['duration']:.2f}"
-    results['numresults'] = len(results['messages'])
-    return JSONResponse(results)
-
-class AggregateQuery(BaseModel):
-    """
-    Aggregate query definition.
-    Accepts query string and field to aggregate on.
-    """
-
-    query: str
-    field: str
-
-@app.post("/api/search/aggregate", response_class=JSONResponse)
-def search_aggregate_by_fields(query: AggregateQuery):
-    """ Aggregate log severities based on the provided query. """
-
-    # Make sure the index exists before querying.
-    search.create_index()
-    result = {}
-    result["results"] = []
-    result["literal_query"] = ""
-    result["error"] = ""
-    try:
-        for res, literal_query in search.aggregate_by_field(query.query, query.field):
-            result["literal_query"] = literal_query
-            for row in res.rows:
-                result["results"].append({
-                    "field": row[1],
-                    "entries": row[3]
-                })
-    except ResponseError:
-        print(f"invalid query {query.query}")
-        result["error"] = f"Invalid query {query.query}"
-
-    return JSONResponse(result)
-
-class SuggestionQuery(BaseModel):
-    index: str
-    prefix: str
-
-@app.post("/api/search/suggestion/get", response_class=JSONResponse)
-def get_autocomplete_suggestion(query: SuggestionQuery):
-    ret = search.autocomplete_suggestion_get(query.index, query.prefix)
-    return JSONResponse(ret)
-
-class TagValsQuery(BaseModel):
-    field: str
-
-@app.post("/api/search/tagvals/get", response_class=JSONResponse)
-def get_tagvals(query: TagValsQuery):
-    ret = search.get_tagvals(query.field)
-    return JSONResponse(ret)
-
-
-### Generator routes
-
-@app.get("/api/generate/{n}", response_class=JSONResponse)
-async def generate(request: Request, n: int):
-    """ Call log generator to generate n log messages to stream. """
-    await generate_messages(n=n, stream=REDIS_STREAM_NAME)
-    return f"Generated {n} log entries"
-
-async def generate_messages(
-    stream: str = REDIS_STREAM_NAME,
-    n: int = 100
-    ):
-    """ Call log generator to generate n messages to stream. """
-    r = aioredis.Redis(connection_pool=aiorpool)
-    for _ in range(n):
-        await log_generator.add_message(r, stream)
-
-@app.get("/api/generator/config", response_class=JSONResponse)
-def get_generator_config():
-    """ Return new client ID. """
-    config = log_generator.get_config()
-    return JSONResponse(content={"response": "ok", "config": config})
-
-class GeneratorMessageAdd(BaseModel):
-    hostidx: int
-    message: str
-
-@app.post("/api/generator/message/add", response_class=JSONResponse)
-def generator_message_add(query: GeneratorMessageAdd):
-    ret = log_generator.add_message_to_host(query.hostidx, query.message)
-    return JSONResponse(ret)
-
-class GeneratorMessageDelete(BaseModel):
-    hostidx: int
-    msgidx: int
-
-@app.post("/api/generator/message/delete", response_class=JSONResponse)
-def generator_message_delete(query: GeneratorMessageDelete):
-    ret = log_generator.delete_message_from_host(query.hostidx, query.msgidx)
-    return JSONResponse(ret)
-
-class GeneratorMessageModify(BaseModel):
-    hostidx: int
-    msgidx: int
-    message: str
-
-@app.post("/api/generator/message/modify", response_class=JSONResponse)
-def generator_message_modify(query: GeneratorMessageModify):
-    ret = log_generator.modify_message_on_host(query.hostidx, query.msgidx, query.message)
-    return JSONResponse(ret)
-
-class GeneratorConfig(BaseModel):
-    config: list
-
-@app.post("/api/generator/config/update", response_class=JSONResponse)
-def generator_config_write(query: GeneratorConfig):
-    ret = log_generator.write_config(query.config)
-    return JSONResponse(ret)
-
-class GeneratorHostOptions(BaseModel):
-    hostname: str
-    enabled: bool
-    amount: int
-
-class GeneratorHostAdd(BaseModel):
-    name: str
-    options: GeneratorHostOptions
-    messages: list[str]
-
-@app.post("/api/generator/host/add", response_class=JSONResponse)
-def generator_host_add(query: GeneratorHostAdd):
-    ret = log_generator.add_host(query.dict())
-    return JSONResponse(ret)
-
 
 ### Log event modification routes
 
 class LogMessage(BaseModel):
+    """ Log message payload. """
     key: str
     field: str
     value: str
 
 @app.post("/api/log/message/modify", response_class=JSONResponse)
 def log_message_modify(query: LogMessage):
+    """ Modify message. """
     ret = rpool.json().set(query.key, f"$.{query.field}", query.value)
     return ret
 
 
 ### Misc routes
+
 @app.get("/api/redis/info", response_class=JSONResponse)
 async def redis_info():
+    """ Get redis INFO. """
     return await get_redis_info()
-
-### Finally mount static files
-
-app.mount("/", StaticFiles(directory="static", html=True), name="static")

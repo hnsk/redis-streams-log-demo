@@ -1,5 +1,5 @@
 .venv
 venv
 env
-__pycache__/*
+*__pycache__*
 dump.rdb
