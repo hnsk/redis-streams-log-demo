@@ -68,15 +68,14 @@ def create_index(
         client.create_index(idx_schema, definition=definition)
     
 
-def search_index(query: str, limit: int = 100):
+def search_index(query: str, start: int = 0, limit: int = 100, sortby_field: str = "timestamp", sort_asc: bool = False):
     """ Search for query from index. """
 
-    count = 0
     while True:
         request = (
             Query(f"{query}")
-            .sort_by("timestamp", asc=False)
-            .paging(count, 100)
+            .sort_by(sortby_field, asc=sort_asc)
+            .paging(start, limit)
             .highlight()
             .return_fields(
                 "timestamp",
@@ -88,10 +87,10 @@ def search_index(query: str, limit: int = 100):
 
         literal_query = f"FT.SEARCH {IDX_NAME} \"{request.query_string()}\" {' '.join([str(x) for x in request.get_args()[1:]])}"
         res = client.search(request)
-        yield res, literal_query
-        count += 100
-        if len(res.docs) == 0 or count >= limit:
-            return res, literal_query
+        return res, literal_query
+        #count += 100
+        #if len(res.docs) == 0 or count >= limit:
+        #    return res, literal_query
         
 
 def aggregate_by_field(query: str, field: str):
@@ -143,6 +142,10 @@ async def startup_event():
 class SearchQuery(BaseModel):
     """ Search query definition. Accepted parameters are a query string. """
     query: str
+    start: int = 0
+    limit: int = 25
+    sortby: str = "timestamp"
+    sort_asc: bool = False
 
 @app.post("/api/search", response_class=JSONResponse)
 def search_string(query: SearchQuery):
@@ -155,18 +158,23 @@ def search_string(query: SearchQuery):
     results['literal_query'] = ""
     results['error'] = ""
     try:
-        for res, literal_query in search_index(query.query):
-            results['total'] = res.total
-            results['duration'] += res.duration
-            results['literal_query'] = literal_query
-            for doc in res.docs:
-               results['messages'].append({
-                   "id": doc.id,
-                    "hostname": doc.hostname,
-                    "timestamp": doc.timestamp,
-                    "message": doc.message,
-                    "log_level": doc.log_level
-                })
+        res, literal_query = search_index(
+                                          query=query.query,
+                                          start=query.start,
+                                          limit=query.limit,
+                                          sortby_field=query.sortby,
+                                          sort_asc=query.sort_asc)
+        results['total'] = res.total
+        results['duration'] += res.duration
+        results['literal_query'] = literal_query
+        for doc in res.docs:
+            results['messages'].append({
+                "id": doc.id,
+                "hostname": doc.hostname,
+                "timestamp": doc.timestamp,
+                "message": doc.message,
+                "log_level": doc.log_level
+            })
     except redis.exceptions.ResponseError:
         print(f"invalid query {query.query}")
         results['error'] = f"Invalid query {query.query}"
@@ -235,3 +243,11 @@ def get_tagvals(query: TagValsQuery):
     """ Get tagvals for indexed field. """
     res = client.tagvals(tagfield=query.field)
     return JSONResponse(res)
+
+def main():
+    res = search_index(query="mail", start=5, limit=5)
+    for doc in res.docs:
+        print(doc.id)
+
+if __name__ == '__main__':
+    main()

@@ -46,13 +46,14 @@
         </div>
         <div class="q-pa-md">
             <q-table
-                :title="`Results: ${num_results} (of ${total_results}) in ${search_duration}ms`"
+                :title="`Results in ${search_duration}ms`"
                 dense
                 :rows="messages"
                 :columns="search_columns"
-                hide-pagination
                 row-key="id"
-                :pagination="{rowsPerPage: 0}"
+                v-model:pagination="pagination"
+                binary-state-sort
+                @request="paginationRequest"
                 virtual-scroll
                 class="fit"
             >
@@ -143,6 +144,14 @@ export default {
             showSearch: true
         })
 
+        let pagination = ref({
+            rowsPerPage: 25,
+            page: 1,
+            rowsNumber: 0,
+            sortBy: 'timestamp',
+            descending: true
+        })
+
         const levelColors = {
             debug: {
                 bg: "blue-2",
@@ -185,10 +194,35 @@ export default {
         ]
 
         const search_columns = [
-            { name: 'timestamp', field: 'timestamp', label: 'Timestamp', align: "left", format: (val) => date.formatDate(parseInt(val), 'YYYY-MM-DD HH:mm:ss.SSS')},
-            { name: 'hostname', field: 'hostname', label: 'Hostname', align: "left"},
-            { name: 'log_level', field: 'log_level', label: 'Log Level', align: "center"},
-            { name: 'message', field: 'message', label: 'Message', style: "width: 100%", align: "left"}
+            {
+                name: 'timestamp',
+                field: 'timestamp',
+                label: 'Timestamp',
+                align: "left",
+                format: (val) => date.formatDate(parseInt(val), 'YYYY-MM-DD HH:mm:ss.SSS'),
+                sortable: true
+            },
+            {
+                name: 'hostname',
+                field: 'hostname',
+                label: 'Hostname',
+                align: "left",
+                sortable: true
+            },
+            {
+                name: 'log_level',
+                field: 'log_level',
+                label: 'Log Level',
+                align: "center",
+                sortable: true
+            },
+            {
+                name: 'message',
+                field: 'message',
+                label: 'Message',
+                style: "width: 100%",
+                align: "left"
+            }
         ]
 
         const aggregate_columns = [
@@ -199,7 +233,8 @@ export default {
         let search_string = ref('*')
 
         watch(search_string, (str) => {
-            searchLogs(str)
+            pagination.value.page = 1
+            searchLogs(str, 0, pagination.value.rowsPerPage, pagination.value.sortBy, !pagination.value.descending)
         })
 
         function aggregateLogs(query) {
@@ -213,23 +248,40 @@ export default {
                 for (let result of response.data.results) {
                     new_aggregates.push(result)
                 }
-                aggregates.value = new_aggregates
+                aggregates.value.splice(0, aggregates.value.length, ...new_aggregates)
             })
         }
 
-        function searchLogs(query) {
+        function paginationRequest(props) {
+            const { page, rowsPerPage, descending, sortBy } = props.pagination
+            const start = (page - 1) * rowsPerPage
+            searchLogs(search_string.value, start, rowsPerPage, sortBy, !descending)
+            pagination.value.rowsPerPage = rowsPerPage
+            pagination.value.page = page
+            pagination.value.descending = descending
+            pagination.value.sortBy = sortBy
+        }
+
+        function searchLogs(query, start, limit, sortby, sort_asc) {
             search_string.value = query.length > 2 ? query : '*'
-            api.post('api/search', {'query': search_string.value})
+            api.post('api/search', {
+                'query': search_string.value,
+                'start': start,
+                'limit': limit,
+                'sortby': sortby,
+                'sort_asc': sort_asc
+                })
                 .then((response) => {
                     if (response.data.error) {
                         literal_search_query.value = response.data.error
                     }
                     else {
-                        messages.value = response.data.messages
+                        messages.value.splice(0, messages.value.length, ...response.data.messages)
                         num_results.value = response.data.numresults
                         total_results.value = response.data.total
                         literal_search_query.value = response.data.literal_query
                         search_duration.value = response.data.duration
+                        pagination.value.rowsNumber = response.data.total
                         aggregateLogs(search_string.value)
                     }
                 })
@@ -289,7 +341,12 @@ export default {
         }
 
         onMounted(() => {
-            searchLogs(search_string.value)
+            searchLogs(
+                search_string.value,
+                (pagination.value.page - 1) * pagination.value.rowsPerPage,
+                pagination.value.rowsPerPage,
+                pagination.value.sortBy,
+                !pagination.value.descending)
         })
 
         return {
@@ -312,7 +369,9 @@ export default {
             searchOptions,
             getAutocompleteOptions,
             addTimestampToQuery,
-            time_range_selector
+            time_range_selector,
+            paginationRequest,
+            pagination
         }   
     }
 }
