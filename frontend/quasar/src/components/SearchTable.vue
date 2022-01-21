@@ -112,8 +112,11 @@
                     <q-btn :icon="time_range_selector ? 'arrow_right' : 'arrow_left'" flat>
                         <q-tooltip>{{ time_range_selector ? 'Select beginning of range' : 'Select end of range' }}</q-tooltip>
                     </q-btn>
-                    </div>
-                </q-td>
+                </div>
+                <div v-else>
+                    {{ props.value }}
+                </div>
+            </q-td>
             </template>
             </q-table>
         </div>
@@ -217,6 +220,13 @@ export default {
                 sortable: true
             },
             {
+                name: 'city',
+                field: 'city',
+                label: 'City',
+                align: 'left',
+                sortable: true
+            },
+            {
                 name: 'message',
                 field: 'message',
                 label: 'Message',
@@ -226,7 +236,7 @@ export default {
         ]
 
         const aggregate_columns = [
-            { name: 'field', field: 'field', label: 'Field', align: "left", classes: row => getLogLevelClass(row.field)},
+            { name: 'field', field: 'field', label: 'Log Level', align: "left", classes: row => getLogLevelClass(row.field)},
             { name: 'entries', field: 'entries', label: 'Entries', align: "left"}
         ]
 

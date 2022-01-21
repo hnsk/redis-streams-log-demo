@@ -19,6 +19,7 @@
       <q-tabs align="left">
         <q-route-tab to="/" label="Stream Viewer" />
         <q-route-tab to="/search" label="Search Logs" />
+        <q-route-tab to="/geosearch" label="Geo search" />
         <q-route-tab to="/generator" label="Generator" />
       </q-tabs>
     </q-header>
