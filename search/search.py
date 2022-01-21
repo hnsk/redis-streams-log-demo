@@ -95,10 +95,6 @@ def search_index(query: str, start: int = 0, limit: int = 100, sortby_field: str
         literal_query = f"FT.SEARCH {IDX_NAME} \"{request.query_string()}\" {' '.join([str(x) for x in request.get_args()[1:]])}"
         res = client.search(request)
         return res, literal_query
-        #count += 100
-        #if len(res.docs) == 0 or count >= limit:
-        #    return res, literal_query
-        
 
 def aggregate_by_field(query: str, field: str):
     """ Aggregate counts for query and group by field. """
@@ -331,11 +327,5 @@ def main():
 
     print(result)
 
-
 if __name__ == '__main__':
     main()
-
-
-# FT.AGGREGATE jsonIdx "*" LOAD 1 coordinates APPLY "geodistance(@coordinates,\"24.933,60.16666\")/1000" AS distance GROUPBY 2 @country_code @distance REDUCE COUNT 0 AS entries SORTBY 2 @distance ASC LIMIT 0 5
-# FT.AGGREGATE jsonIdx "*" LOAD 1 coordinates APPLY "geodistance(@coordinates,\"24.933,60.16666\")/1000" AS distance GROUPBY 2 @city @distance REDUCE COUNT 0 AS entries FILTER "@distance < 400"
-# FT.AGGREGATE jsonIdx "@city:{Tallinn} && @country_code:{EE}" GROUPBY 1 @log_level REDUCE COUNT 0 as entries SORTBY 2 @log_level DESC
