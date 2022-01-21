@@ -6,7 +6,8 @@ const routes = [
     children: [
       { path: '', component: () => import('pages/StreamViewer.vue') },
       { path: '/search', component: () => import('pages/Search.vue') },
-      { path: '/generator', component: () => import('pages/Generator.vue')}
+      { path: '/generator', component: () => import('pages/Generator.vue')},
+      { path: '/geosearch', component: () => import('pages/GeoSearch.vue')}
     ]
   },
 

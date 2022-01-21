@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from ast import literal_eval
 from os import environ
 from typing import List, Tuple
 from pydantic import BaseModel
@@ -9,7 +10,7 @@ import redis
 from redis.commands.search import reducers
 from redis.commands.search.aggregation import AggregateRequest, Asc, Desc
 from redis.commands.search.commands import Query
-from redis.commands.search.field import TextField, TagField, NumericField
+from redis.commands.search.field import TextField, TagField, NumericField, GeoField
 from redis.commands.search.indexDefinition import IndexDefinition, IndexType
 from redis.commands.search.suggestion import Suggestion
 
@@ -25,7 +26,10 @@ LOG_SCHEMA = (
     NumericField("$.timestamp", as_name="timestamp", sortable=True),
     TextField("$.hostname", as_name="hostname", sortable=True),
     TagField("$.log_level", as_name="log_level"),
-    TextField("$.message", as_name="message")
+    TextField("$.message", as_name="message"),
+    TagField("$.country_code", as_name="country_code"),
+    TagField("$.city", as_name="city"),
+    GeoField("$.coordinates", as_name="coordinates")
 )
 
 LOG_PREFIX = ["logs:"]
@@ -81,7 +85,10 @@ def search_index(query: str, start: int = 0, limit: int = 100, sortby_field: str
                 "timestamp",
                 "hostname",
                 "log_level",
-                "message"
+                "message",
+                "coordinates",
+                "city",
+                "country_code"
             )
         )
 
@@ -115,6 +122,30 @@ def aggregate_by_field(query: str, field: str):
         if not res.cursor:
             break
     return res, literal_query
+
+
+def get_cities_aggregate_by_coordinates(coordinates: str, distance: int, query: str = '*'):
+    """ Get cities """
+
+    request = (
+        AggregateRequest(query)
+        .load("coordinates")
+        .apply(distance=f"geodistance(@coordinates, {coordinates})/1000")
+        .group_by(
+            ["@city", "@distance", "@country_code", "@coordinates"],
+            reducers
+            .count()
+            .alias("entries")
+        )
+        .filter(f"@distance < {distance}")
+        .sort_by("@distance")
+        .limit(0, 250)
+    )
+    literal_query = f"FT.AGGREGATE {IDX_NAME} \"{request.build_args()[0]}\" {' '.join([str(x) for x in request.build_args()[1:]])}"
+    res = None
+    res = client.aggregate(request)
+    return res, literal_query
+
 
 def autocomplete_suggestion_add(idx: str, string: str, score: float = 1, increment=True):
     sug = Suggestion(string=string, score=score)
@@ -173,7 +204,10 @@ def search_string(query: SearchQuery):
                 "hostname": doc.hostname,
                 "timestamp": doc.timestamp,
                 "message": doc.message,
-                "log_level": doc.log_level
+                "log_level": doc.log_level,
+                "city": doc.city,
+                "country_code": doc.country_code,
+                "coordinates": doc.coordinates
             })
     except redis.exceptions.ResponseError:
         print(f"invalid query {query.query}")
@@ -213,6 +247,37 @@ def search_aggregate_by_fields(query: AggregateQuery):
 
     return JSONResponse(result)
 
+class CitiesAggregateQuery(BaseModel):
+    """ Cities Aggregate query.
+    Receives coordinates and distance. Optionally query string. """
+    coordinates: str
+    distance: int
+    query: str = '*'
+
+@app.post("/api/search/aggregate/cities", response_class=JSONResponse)
+def get_cities_by_coordinates(query: CitiesAggregateQuery):
+    """ Get cities within specified distance of given coordinates"""
+    result = {}
+    result["results"] = []
+    result["literal_query"] = ""
+    result["error"] = ""
+
+    res, literal_query = get_cities_aggregate_by_coordinates(
+        coordinates=query.coordinates,
+        distance=query.distance,
+        query=query.query)
+
+    result["literal_query"] = literal_query
+    for row in res.rows:
+        result["results"].append({
+            "city": row[1],
+            "distance": row[3],
+            "country_code": row[5],
+            "coordinates": row[7],
+            "entries": row[9]
+        })
+    return JSONResponse(result)
+
 class SuggestionQuery(BaseModel):
     """ Autocomplete suggestion query payload. """
     index: str
@@ -245,9 +310,32 @@ def get_tagvals(query: TagValsQuery):
     return JSONResponse(res)
 
 def main():
-    res = search_index(query="mail", start=5, limit=5)
+    res, literal_query = search_index(query="mail", start=5, limit=5)
     for doc in res.docs:
         print(doc.id)
+    
+    result = {}
+    result["results"] = []
+    result["literal_query"] = ""
+    result["error"] = ""
+
+    res, literal_query = get_cities_aggregate_by_coordinates(coordinates="24.933,60.16666", distance=400)
+    result["literal_query"] = literal_query
+    for row in res.rows:
+        result["results"].append({
+            "city": row[1],
+            "distance": row[3],
+            "coordinates": row[5],
+            "entries": row[7]
+        })
+
+    print(result)
+
 
 if __name__ == '__main__':
     main()
+
+
+# FT.AGGREGATE jsonIdx "*" LOAD 1 coordinates APPLY "geodistance(@coordinates,\"24.933,60.16666\")/1000" AS distance GROUPBY 2 @country_code @distance REDUCE COUNT 0 AS entries SORTBY 2 @distance ASC LIMIT 0 5
+# FT.AGGREGATE jsonIdx "*" LOAD 1 coordinates APPLY "geodistance(@coordinates,\"24.933,60.16666\")/1000" AS distance GROUPBY 2 @city @distance REDUCE COUNT 0 AS entries FILTER "@distance < 400"
+# FT.AGGREGATE jsonIdx "@city:{Tallinn} && @country_code:{EE}" GROUPBY 1 @log_level REDUCE COUNT 0 as entries SORTBY 2 @log_level DESC

@@ -65,6 +65,11 @@ INITIAL_CONFIGURATION = {
     ]
 }
 
+# Populate country capitals object
+with open('country-capitals.json', 'r') as capitals:
+    capitals = json.loads(capitals.read())
+    rpool.json().set('capitals', '$', capitals)
+
 
 def init_config():
     """ Init configuration for generator. """
@@ -76,6 +81,16 @@ def get_config():
     config = rpool.json().get("generator:config")
     return config
 
+def get_random_capital_with_coordinates():
+    """ Return random capital city with coordinates. """
+    numcapitals = rpool.json().arrlen('capitals')
+    capital = rpool.json().get('capitals', f'.[{randint(0, numcapitals-1)}]')
+    return {
+        'capital': capital['CapitalName'],
+        'coordinates': f"{capital['CapitalLongitude']},{capital['CapitalLatitude']}",
+        'country_code': capital['CountryCode']
+    }
+    
 def random_message():
     """ Generate random message. """
     config = get_config()
@@ -97,6 +112,10 @@ def random_message():
         k=1
     )[0]
     message["message"] = choice(hostconfig["messages"])
+    location = get_random_capital_with_coordinates()
+    message["city"] = location['capital']
+    message["coordinates"] = location['coordinates']
+    message['country_code'] = location['country_code']
     return message
 
 async def add_message(r, stream="test"):
@@ -202,3 +221,9 @@ def generator_host_add(query: GeneratorHostAdd):
     """ Add host to generator configuration. """
     ret = rpool.json().arrappend("generator:config", f"$.hosts", query.dict())
     return JSONResponse(ret)
+
+def main():
+    print(random_message())
+
+if __name__ == '__main__':
+    main()
