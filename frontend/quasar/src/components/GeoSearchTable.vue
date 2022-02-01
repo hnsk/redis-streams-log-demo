@@ -8,6 +8,7 @@
             :minZoom=3
             :maxZoom=7
             worldCopyJump
+            ref="logMap"
             >
                 <l-control-scale position="topright" :imperial="false" :metric="true" />
                 <l-control position="bottomleft">
@@ -34,13 +35,15 @@
                 v-for="(marker, index) in markers"
                 :key="index"
                 :lat-lng="marker"
-                @click="getCityAggregates(markersData[index].city, markersData[index].country_code, index)">
-                    <l-popup>
+                @click="getCityAggregates(markersData[index].city, markersData[index].country_code)">
+                    <l-popup
+                        :options="{autoPan: false}"
+                    >
                             <div style="width: 200px">
                                 <q-table
-                                    :title="`${markersData[index].city} (${markersData[index].country_code})`"
+                                    :title="`${selectedMarkerData.city} (${selectedMarkerData.country_code})`"
                                     dense
-                                    :rows="markersData[index].aggregates"
+                                    :rows="selectedMarkerData.aggregates"
                                     :columns="aggregate_columns"
                                     :hide-pagination="true"
                                     row-key="field"
@@ -96,6 +99,7 @@ export default {
         }
         const url = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
         const attribution = '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
+        const logMap = ref(null)
 
         onMounted(() => {
             updateMarkers("24.905717,60.172445")
@@ -103,6 +107,7 @@ export default {
         })
         
         watch(center, (c) => {
+            logMap.value.leafletObject.closePopup()
             const coordinates = `${c.lng},${c.lat}`
             updateMarkers(coordinates)
             getCircleAggregates()
@@ -110,6 +115,11 @@ export default {
 
         let markers = ref([])
         let markersData = ref([])
+        let selectedMarkerData = ref({
+            city: '',
+            country_code: '',
+            aggregates: []
+        })
 
         function updateMarkers(coordinates) {
             api.post('api/search/aggregate/cities', {
@@ -139,7 +149,10 @@ export default {
             { name: 'entries', field: 'entries', label: 'Entries', align: "left"}
         ]
 
-        function getCityAggregates(city, countryCode, index) {
+        function getCityAggregates(city, countryCode) {
+            selectedMarkerData.value.city = city
+            selectedMarkerData.value.country_code = countryCode
+            console.log(selectedMarkerData.value)
             api.post('api/search/aggregate', {
                 query: `@city:{${city}} && @country_code:{${countryCode}}`,
                 field: 'log_level'
@@ -149,9 +162,9 @@ export default {
                 for (let result of response.data.results) {
                     new_aggregates.push(result)
                 }
-                markersData.value[index].aggregates.splice(
+                selectedMarkerData.value.aggregates.splice(
                     0,
-                    markersData.value[index].aggregates.length,
+                    selectedMarkerData.value.aggregates.length,
                     ...new_aggregates
                 )
             })
@@ -162,7 +175,6 @@ export default {
         function getCircleAggregates() {
             let query = center.value.length == 2 ? center.value.join(" ") : `${center.value.lng} ${center.value.lat}`
             if (center.value.length == 2)
-            console.log(center.value.length)
             api.post('api/search/aggregate', {
                 query: `@coordinates:[${query} ${zoomRadius[zoom.value]} km]`,
                 field: 'log_level'
@@ -197,7 +209,9 @@ export default {
             getCityAggregates,
             circleAggregates,
             aggregate_columns,
-            zoomRadius
+            zoomRadius,
+            selectedMarkerData,
+            logMap
         }
     },
 }
