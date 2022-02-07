@@ -70,7 +70,17 @@ def create_index(
         client.info()
     except redis.exceptions.ResponseError:
         client.create_index(idx_schema, definition=definition)
+
+def generate_literal_query(cmd: str, idx: str, build_args):
+    """ Return literal query. """
+    literal_query = [cmd, idx]
+    for elem in build_args:
+        if len(elem.split(" ")) > 1:
+            literal_query.append(f'"{elem}"')
+        else:
+            literal_query.append(elem)
     
+    return ' '.join(literal_query)
 
 def search_index(query: str, start: int = 0, limit: int = 100, sortby_field: str = "timestamp", sort_asc: bool = False):
     """ Search for query from index. """
@@ -110,7 +120,7 @@ def aggregate_by_field(query: str, field: str):
         .sort_by(Desc("@entries"))
     )
 
-    literal_query = f"FT.AGGREGATE {IDX_NAME} \"{request.build_args()[0]}\" {' '.join([str(x) for x in request.build_args()[1:]])}"
+    literal_query = generate_literal_query("FT.AGGREGATE", IDX_NAME, request.build_args())
     res = None
     while True:
         res = client.aggregate(request)
@@ -137,7 +147,7 @@ def get_cities_aggregate_by_coordinates(coordinates: str, distance: int, query: 
         .sort_by("@distance")
         .limit(0, 250)
     )
-    literal_query = f"FT.AGGREGATE {IDX_NAME} \"{request.build_args()[0]}\" {' '.join([str(x) for x in request.build_args()[1:]])}"
+    literal_query = generate_literal_query("FT.AGGREGATE", IDX_NAME, request.build_args())
     res = None
     res = client.aggregate(request)
     return res, literal_query

@@ -56,7 +56,17 @@
                 <l-tile-layer
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 :attribution="attribution" />
-            </l-map>   
+            </l-map>
+            <p class="text-h5 q-mt-md">Circle events:</p>
+            <q-banner class="bg-grey-9 text-white q-ma-md text-weight-bold codebox">
+                {{ circleAggregatesQuery }}
+                <q-tooltip>Circle events aggregate query.</q-tooltip>
+            </q-banner>
+            <p class="text-h5 q-mt-md">Circle markers:</p>
+            <q-banner class="bg-grey-9 text-white q-ma-md text-weight-bold codebox">
+                {{ markersQuery }}
+                <q-tooltip>Circle markers aggregate query.</q-tooltip>
+            </q-banner>
         </div>
     </div>
 </template>
@@ -121,6 +131,7 @@ export default {
             aggregates: []
         })
 
+        let markersQuery = ref("")
         function updateMarkers(coordinates) {
             api.post('api/search/aggregate/cities', {
                 coordinates: coordinates,
@@ -141,6 +152,7 @@ export default {
                 }
                 markers.value.splice(0, markers.value.length, ...results)
                 markersData.value.splice(0, markersData.value.length, ...resultsData)
+                markersQuery.value = response.data.literal_query
             })
         }
         
@@ -152,7 +164,6 @@ export default {
         function getCityAggregates(city, countryCode) {
             selectedMarkerData.value.city = city
             selectedMarkerData.value.country_code = countryCode
-            console.log(selectedMarkerData.value)
             api.post('api/search/aggregate', {
                 query: `@city:{${city}} && @country_code:{${countryCode}}`,
                 field: 'log_level'
@@ -171,6 +182,7 @@ export default {
         }
 
         let circleAggregates = ref([])
+        let circleAggregatesQuery = ref("")
 
         function getCircleAggregates() {
             let query = center.value.length == 2 ? center.value.join(" ") : `${center.value.lng} ${center.value.lat}`
@@ -188,6 +200,7 @@ export default {
                     circleAggregates.value.length,
                     ...new_aggregates
                 )
+                circleAggregatesQuery.value = response.data.literal_query
             })
         }
 
@@ -205,8 +218,10 @@ export default {
             attribution,
             markers,
             markersData,
+            markersQuery,
             getCityAggregates,
             circleAggregates,
+            circleAggregatesQuery,
             aggregate_columns,
             zoomRadius,
             selectedMarkerData,
@@ -233,5 +248,14 @@ td.error {
 td.critical {
     background-color: $red-10;
     color: seashell;
+}
+.codebox {
+    font-family: Courier, sans-serif;
+    font-size: 12px;
+    margin-bottom: 10px;
+    margin-top: 10px;
+    -webkit-border-radius: 0px 0px 6px 6px;
+    -moz-border-radius: 0px 0px 6px 6px;
+    border-radius: 6px 6px 6px 6px;
 }
 </style>
