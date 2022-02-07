@@ -187,7 +187,13 @@ export default {
         let circleAggregatesQuery = ref("")
 
         function getCircleAggregates() {
-            let query = center.value.length == 2 ? center.value.join(" ") : `${center.value.lng} ${center.value.lat}`
+            let query = null
+            if ('lng' in center.value) {
+                query = `${center.value.lng} ${center.value.lat}`
+            }
+            else {
+                query = `${center.value[1]} ${center.value[0]}`
+            }
             api.post('api/search/aggregate', {
                 query: `@coordinates:[${query} ${zoomRadius[zoom.value]} km]`,
                 field: 'log_level'
