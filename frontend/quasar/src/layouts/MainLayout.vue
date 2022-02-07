@@ -35,6 +35,8 @@
 
 import MessageGenerator from '../components/MessageGenerator'
 import RedisStats from '../components/RedisStats.vue'
+import store from '../store'
+import { onMounted} from 'vue'
 
 export default {
   components: {
@@ -43,6 +45,10 @@ export default {
   },
 
   setup() {
+    if (!(store.state.client_id)) {
+      onMounted(store.dispatch('setClientID'))
+    }
+
     return {
       MessageGenerator,
       RedisStats
