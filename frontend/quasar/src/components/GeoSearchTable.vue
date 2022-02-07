@@ -99,7 +99,7 @@ export default {
 
     setup() {
         let zoom = ref(3)
-        let center = ref([60.172445, 24.905717])
+        let center = ref([48, 23])
         const zoomRadius = {
             3: 2500,
             4: 1500,
@@ -110,10 +110,12 @@ export default {
         const url = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
         const attribution = '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
         const logMap = ref(null)
+        let pollInterval = null
 
         onMounted(() => {
-            updateMarkers("24.905717,60.172445")
+            updateMarkers("23,48")
             getCircleAggregates()
+            pollInterval = setInterval(getCircleAggregates, 1000)
         })
         
         watch(center, (c) => {

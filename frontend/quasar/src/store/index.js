@@ -12,6 +12,9 @@ export default createStore({
       redis_used_memory: 0
     },
     getters: {
+      getMessageCounter(state) {
+        return state.message_counter
+      }
     },
     mutations: {
       increaseMessageCounter(state) {
