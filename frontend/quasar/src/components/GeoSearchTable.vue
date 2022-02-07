@@ -174,7 +174,6 @@ export default {
 
         function getCircleAggregates() {
             let query = center.value.length == 2 ? center.value.join(" ") : `${center.value.lng} ${center.value.lat}`
-            if (center.value.length == 2)
             api.post('api/search/aggregate', {
                 query: `@coordinates:[${query} ${zoomRadius[zoom.value]} km]`,
                 field: 'log_level'

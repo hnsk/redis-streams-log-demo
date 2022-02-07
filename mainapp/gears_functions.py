@@ -18,11 +18,17 @@ def split_by_severity(id, payload):
         'json',
         payload["json"]
     )
-    execute(
+    sev_count = execute(
         'ZINCRBY',
         'severities',
         '1',
         severity_stream
+    )
+    execute(
+        'TS.ADD',
+        f"ts:{severity_stream}",
+        '*',
+        sev_count
     )
     execute(
         'JSON.SET',

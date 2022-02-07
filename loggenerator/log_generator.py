@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import asyncio
 import json
 import time
 from os import environ
@@ -9,7 +10,7 @@ from pydantic import BaseModel
 
 import aioredis
 import redis
-from fastapi import FastAPI, Request
+from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 REDIS_HOST = environ.get('REDIS_HOST') or 'localhost'
@@ -70,6 +71,34 @@ with open('country-capitals.json', 'r') as capitals:
     capitals = json.loads(capitals.read())
     rpool.json().set('capitals', '$', capitals)
 
+class MessageGenerator:
+    """ Class for automated message generation. """
+    def __init__(self, enabled: bool = False, min_delay: int = 100, max_delay: int = 1000):
+        self.enabled = enabled
+        self.min_delay = min_delay
+        self.max_delay = max_delay
+        self.redis = aioredis.Redis(connection_pool=aiorpool)
+
+    async def enable(self) -> None:
+        """ Enable generator and run it until it is disabled. """
+        self.generator_enabled = True
+        while self.generator_enabled:
+            await add_message(self.redis)
+            await asyncio.sleep(randint(self.min_delay, self.max_delay) / 1000)
+
+    def disable(self) -> None:
+        """ Disable generator. """
+        self.generator_enabled = False
+
+    def set_min_delay(self, min_delay: int):
+        """ Set minimum delay in milliseconds. """
+        self.min_delay = min_delay
+
+    def set_max_delay(self, max_delay: int):
+        """ Set maximum delay in milliseconds. """
+        self.max_delay = max_delay
+
+message_generator = MessageGenerator()
 
 def init_config():
     """ Init configuration for generator. """
@@ -137,6 +166,18 @@ app = FastAPI()
 async def startup_event():
     """ Initialize config on startup. """
     init_config()
+
+@app.get("/api/generator/enable", response_class=JSONResponse)
+async def enable_generator(background_tasks: BackgroundTasks):
+    """ Start message generator instance. """
+    background_tasks.add_task(message_generator.enable)
+    return {"success": True}
+
+@app.get("/api/generator/disable", response_class=JSONResponse)
+async def disable_generator():
+    """ Disable all generators. """
+    message_generator.disable()
+    return {"success": True}
 
 @app.get("/api/generator/generate/{n}", response_class=JSONResponse)
 async def generate(request: Request, n: int):

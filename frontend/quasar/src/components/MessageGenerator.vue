@@ -15,6 +15,12 @@
             <q-input filled v-model="numMessages" dense class="bg-white" @keyup.enter="generateMessages" label="Generate Messages" >
                 <template v-slot:after>
                     <q-btn round dense flat icon="send" color="primary" @click="generateMessages" />
+                    <q-btn round dense flat icon="add" color="primary" @click="enableGenerator">
+                        <q-tooltip>Start auto generator.</q-tooltip>
+                    </q-btn>
+                    <q-btn round dense flat icon="cancel" color="primary" @click="disableGenerator">
+                        <q-tooltip>Stop generators.</q-tooltip>
+                    </q-btn>
                 </template>
             </q-input>
         </div>
@@ -33,9 +39,19 @@ export default {
             api.get(`api/generator/generate/${numMessages.value}`)
          }
 
+        function enableGenerator() {
+            api.get('api/generator/enable')
+        }
+
+        function disableGenerator() {
+            api.get('api/generator/disable')
+        }
+
          return {
             numMessages,
             generateMessages,
+            enableGenerator,
+            disableGenerator,
             store
         }
     },
