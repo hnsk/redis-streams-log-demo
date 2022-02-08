@@ -28,7 +28,12 @@ def split_by_severity(id, payload):
         'TS.ADD',
         f"ts:{severity_stream}",
         '*',
-        sev_count
+        sev_count,
+        'LABELS',
+        'log_level',
+        severity_stream,
+        'type',
+        'logs'
     )
     execute(
         'JSON.SET',
