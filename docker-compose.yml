@@ -49,6 +49,20 @@ services:
       restart_policy:
         condition: on-failure
 
+  timeseries:
+    build: ./timeseries
+    depends_on:
+      - "redis"
+    links:
+      - "redis:redis"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PYTHONUNBUFFERED=1
+    deploy:
+      restart_policy:
+        condition: on-failure
+
   frontend:
     build: ./frontend
     depends_on:
