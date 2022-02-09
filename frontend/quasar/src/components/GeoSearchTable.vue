@@ -72,7 +72,7 @@
 </template>
 
 <script>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { api } from 'boot/axios'
 import {
     LMap,
@@ -116,6 +116,10 @@ export default {
             updateMarkers("23,48")
             getCircleAggregates()
             pollInterval = setInterval(getCircleAggregates, 1000)
+        })
+
+        onBeforeUnmount(() => {
+            clearInterval(pollInterval)
         })
         
         watch(center, (c) => {
