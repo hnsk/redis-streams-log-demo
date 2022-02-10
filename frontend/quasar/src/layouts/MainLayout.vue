@@ -21,6 +21,7 @@
         <q-route-tab to="/search" label="Search Logs" />
         <q-route-tab to="/geosearch" label="Geo search" />
         <q-route-tab to="/generator" label="Generator" />
+        <q-route-tab to="/timeseries" label="TimeSeries" />
       </q-tabs>
     </q-header>
 

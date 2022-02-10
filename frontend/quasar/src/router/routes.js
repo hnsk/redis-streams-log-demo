@@ -7,7 +7,8 @@ const routes = [
       { path: '', component: () => import('pages/StreamViewer.vue') },
       { path: '/search', component: () => import('pages/Search.vue') },
       { path: '/generator', component: () => import('pages/Generator.vue')},
-      { path: '/geosearch', component: () => import('pages/GeoSearch.vue')}
+      { path: '/geosearch', component: () => import('pages/GeoSearch.vue')},
+      { path: '/timeseries', component: () => import('pages/TimeSeries.vue')}
     ]
   },
 
