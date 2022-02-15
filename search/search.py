@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-from ast import literal_eval
 from os import environ
 from typing import List, Tuple
 from pydantic import BaseModel
