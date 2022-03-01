@@ -18,6 +18,12 @@ Redis modules:
 
 <br>
 
+# Overview
+## Data ingestion
+![Ingest diagram](redis_streams_demo_ingestion.png)
+
+## Client access
+![Client access](redis_streams_demo_client_access.png)
 # Installation
 
 ## Docker
