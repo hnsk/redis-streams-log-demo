@@ -4,7 +4,7 @@ from os import environ
 from typing import Any, List, Union
 from pydantic import BaseModel
 
-import redis
+import redis.asyncio as redis
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -18,7 +18,7 @@ rpool = redis.Redis(
     decode_responses=True
 )
 
-def get_mrange(
+async def get_mrange(
         from_time: Union[int, str],
         to_time: Union[int, str],
         filters: List[str],
@@ -27,7 +27,7 @@ def get_mrange(
     ) -> List:
     """ Get TS.MRANGE """
 
-    res = rpool.ts().mrange(
+    res = await rpool.ts().mrange(
         from_time=from_time,
         to_time=to_time,
         filters=filters,
@@ -65,9 +65,9 @@ class TimeSeriesMrangeQuery(BaseModel):
     filters: List[str] = ["type=logs"]
 
 @app.post("/api/timeseries/mrange", response_class=JSONResponse)
-def timeseries_mrange(query: TimeSeriesMrangeQuery):
+async def timeseries_mrange(query: TimeSeriesMrangeQuery):
     """ Get TS.MRANGE results. """
-    result = get_mrange(
+    result = await get_mrange(
         from_time=query.from_time,
         to_time=query.to_time,
         aggregation_type=query.aggregation_type,
