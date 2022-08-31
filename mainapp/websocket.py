@@ -5,8 +5,7 @@ from os import environ
 from time import time
 from pydantic import BaseModel
 
-import redis
-import aioredis
+import redis.asyncio as redis
 
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import JSONResponse
@@ -39,12 +38,6 @@ class WebsocketClientConnection:
 # Create FastAPI app instance
 app = FastAPI()
 
-# Create asynchronous connection pool for Redis
-aiorpool = aioredis.ConnectionPool(
-    host=REDIS_HOST,
-    port=REDIS_PORT,
-    decode_responses=True)
-
 # Create synchronous connection pool for Redis
 rpool = redis.Redis(
     host=REDIS_HOST,
@@ -54,14 +47,13 @@ rpool = redis.Redis(
 
 # Get INFO from redis
 async def get_redis_info():
-    r = aioredis.Redis(connection_pool=aiorpool)
-    return await r.info()
+    return await rpool.info()
 
 class ConnectionManager:
     """ Class for managing WebSocket connections"""
     def __init__(self):
         self.active_connections: dict = {}
-        self.rconn = aioredis.Redis(connection_pool=aiorpool)
+        self.rconn = rpool
         self.available_streams = {}
         self.splitter_active = False
 
@@ -104,7 +96,7 @@ class ConnectionManager:
                             groupname=REDIS_CONSUMER_GROUP,
                             mkstream=False
                         )
-                    except aioredis.exceptions.ResponseError:
+                    except redis.exceptions.ResponseError:
                         pass
 
         # If no streams are available and splitter is not active.
@@ -136,24 +128,23 @@ manager = ConnectionManager()
 @app.on_event("startup")
 async def startup_event():
     """ Initialise Redis database on server startup. """
-    r = aioredis.Redis(connection_pool=aiorpool)
 
     # Remove old consumer IDs and severities if they exist.
-    await r.delete("consumerids")
-    await r.delete("severities")
+    await rpool.delete("consumerids")
+    await rpool.delete("severities")
 
     # Remove existing Redis Gears script registrations if they exist.
-    active_gears_registrations = await r.execute_command('RG.DUMPREGISTRATIONS')
+    active_gears_registrations = await rpool.execute_command('RG.DUMPREGISTRATIONS')
     for registration in active_gears_registrations:
         print(f"Unregistering: {registration[1]}... ", end="")
-        print(await r.execute_command('RG.UNREGISTER', registration[1]))
-        await r.delete("test")
+        print(await rpool.execute_command('RG.UNREGISTER', registration[1]))
+        await rpool.delete("test")
 
     # Delete existing stream if it exists
-    await r.delete(REDIS_STREAM_NAME)
+    await rpool.delete(REDIS_STREAM_NAME)
 
     # Create consumer group
-    await r.xgroup_create(
+    await rpool.xgroup_create(
         name=REDIS_STREAM_NAME,
         groupname=REDIS_CONSUMER_GROUP,
         mkstream = True
@@ -169,18 +160,15 @@ def shutdown_event() -> None:
 @app.get("/api/clientid", response_class=JSONResponse)
 async def get_clientid():
     """ Return new client ID. """
-    r = aioredis.Redis(connection_pool=aiorpool)
-    client_id = await r.incrby("consumerids", 1)
+    client_id = await rpool.incrby("consumerids", 1)
     return JSONResponse(content={"response": "ok", "client_id": client_id})
 
 @app.get("/api/streams/splitter", response_class=JSONResponse)
 async def register_stream_splitter():
     """ Register Redis Gears function to split stream to severities. """
-    r = aioredis.Redis(connection_pool=aiorpool)
-
     # Trim all old entries from the stream before registration.
     print(f"Trimming {REDIS_STREAM_NAME} before registering Gears function")
-    await r.xtrim(
+    await rpool.xtrim(
         name=REDIS_STREAM_NAME,
         maxlen=0,
         approximate=False)
@@ -191,7 +179,7 @@ async def register_stream_splitter():
     for client_id in manager.active_connections:
         manager.active_connections[client_id].remove_stream(REDIS_STREAM_NAME)
     print("Registering severity splitter... ", end="")
-    print(await r.execute_command('RG.PYEXECUTE', gears_functions.SPLIT_BY_SEVERITY))
+    print(await rpool.execute_command('RG.PYEXECUTE', gears_functions.SPLIT_BY_SEVERITY))
     manager.activate_splitter()
     return JSONResponse(content={"response": "ok"})
 
@@ -256,7 +244,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int):
 async def read_streams(client_id: str):
     """ Read entries from subscribed streams for client_id. """
 
-    r = aioredis.Redis(connection_pool=aiorpool)
     consumername = f"consumer-{client_id}"
     if client_id in manager.active_connections and len(manager.active_connections[client_id].streams) > 0:
         response = []
@@ -264,7 +251,7 @@ async def read_streams(client_id: str):
             # Read up to 1 message from each subscribed stream.
             # Call is blocking and we're waiting for 1 second for new
             # events in the streams.
-            data = await r.xreadgroup(
+            data = await rpool.xreadgroup(
                 groupname=REDIS_CONSUMER_GROUP,
                 consumername=consumername,
                 streams=manager.active_connections[client_id].streams,
@@ -273,12 +260,12 @@ async def read_streams(client_id: str):
             if len(data) > 0:
                 for entry in data:
                     response.append(entry[1][0][1]) # Event data
-                    await r.xack(
+                    await rpool.xack(
                         entry[0], # Stream name
                         REDIS_CONSUMER_GROUP,
                         entry[1][0][0] # Stream ID
                     )
-        except aioredis.exceptions.DataError:
+        except redis.exceptions.DataError:
             # If no streams are being consumed just return and try again later
             pass
         return response
@@ -293,9 +280,9 @@ class LogMessage(BaseModel):
     value: str
 
 @app.post("/api/log/message/modify", response_class=JSONResponse)
-def log_message_modify(query: LogMessage):
+async def log_message_modify(query: LogMessage):
     """ Modify message. """
-    ret = rpool.json().set(query.key, f"$.{query.field}", query.value)
+    ret = await rpool.json().set(query.key, f"$.{query.field}", query.value)
     return ret
 
 

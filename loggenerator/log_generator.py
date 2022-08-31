@@ -8,8 +8,7 @@ from random import choice, choices, randint
 from typing import Optional, List
 from pydantic import BaseModel
 
-import aioredis
-import redis
+import redis.asyncio as redis
 from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -22,12 +21,6 @@ rpool = redis.Redis(
     port=REDIS_PORT,
     decode_responses=True
 )
-
-# Create asynchronous connection pool for Redis
-aiorpool = aioredis.ConnectionPool(
-    host=REDIS_HOST,
-    port=REDIS_PORT,
-    decode_responses=True)
 
 LOG_LEVELS = [
     "DEBUG",
@@ -47,8 +40,8 @@ INITIAL_CONFIGURATION = {
                 "amount": 100
             },
             "messages": [
-                "Mail received from <test@example.com>",
-                "Mail sent to <test@example.com>"
+                "Mail received from test@example.com",
+                "Mail sent to test@example.com"
             ]
         },
         {
@@ -66,24 +59,25 @@ INITIAL_CONFIGURATION = {
     ]
 }
 
-# Populate country capitals object
-with open('country-capitals.json', 'r') as capitals:
-    capitals = json.loads(capitals.read())
-    rpool.json().set('capitals', '$', capitals)
+async def populate_capitals():
+    # Populate country capitals object
+    with open('country-capitals.json', 'r') as capitals:
+        capitals = json.loads(capitals.read())
+        await rpool.json().set('capitals', '$', capitals)
 
 class MessageGenerator:
     """ Class for automated message generation. """
-    def __init__(self, enabled: bool = False, min_delay: int = 100, max_delay: int = 1000):
+    def __init__(self, enabled: bool = False, min_delay: int = 100, max_delay: int = 1000, stream: str = "test"):
         self.enabled = enabled
         self.min_delay = min_delay
         self.max_delay = max_delay
-        self.redis = aioredis.Redis(connection_pool=aiorpool)
+        self.stream = stream
 
     async def enable(self) -> None:
         """ Enable generator and run it until it is disabled. """
         self.generator_enabled = True
         while self.generator_enabled:
-            await add_message(self.redis)
+            await add_message(self.stream)
             await asyncio.sleep(randint(self.min_delay, self.max_delay) / 1000)
 
     def disable(self) -> None:
@@ -98,31 +92,31 @@ class MessageGenerator:
         """ Set maximum delay in milliseconds. """
         self.max_delay = max_delay
 
-message_generator = MessageGenerator()
+message_generator = MessageGenerator(stream=REDIS_STREAM_NAME)
 
-def init_config():
+async def init_config():
     """ Init configuration for generator. """
-    ret = rpool.json().set("generator:config", "$", INITIAL_CONFIGURATION)
+    ret = await rpool.json().set("generator:config", "$", INITIAL_CONFIGURATION)
     return ret
 
-def get_config():
+async def get_config():
     """ Retrieve full configuration. """
-    config = rpool.json().get("generator:config")
+    config = await rpool.json().get("generator:config")
     return config
 
-def get_random_capital_with_coordinates():
+async def get_random_capital_with_coordinates():
     """ Return random capital city with coordinates. """
-    numcapitals = rpool.json().arrlen('capitals')
-    capital = rpool.json().get('capitals', f'.[{randint(0, numcapitals-1)}]')
+    numcapitals = await rpool.json().arrlen('capitals')
+    capital = await rpool.json().get('capitals', f'.[{randint(0, numcapitals-1)}]')
     return {
         'capital': capital['CapitalName'],
         'coordinates': f"{capital['CapitalLongitude']},{capital['CapitalLatitude']}",
         'country_code': capital['CountryCode']
     }
     
-def random_message():
+async def random_message():
     """ Generate random message. """
-    config = get_config()
+    config = await get_config()
     hostconfig = choice([host for host in filter(lambda x: x["options"]["enabled"], config["hosts"])])
     hostname = hostconfig["options"]["hostname"].replace('RANDINT', str(randint(1, int(hostconfig["options"]["amount"]))))
 
@@ -141,16 +135,16 @@ def random_message():
         k=1
     )[0]
     message["message"] = choice(hostconfig["messages"])
-    location = get_random_capital_with_coordinates()
+    location = await get_random_capital_with_coordinates()
     message["city"] = location['capital']
     message["coordinates"] = location['coordinates']
     message['country_code'] = location['country_code']
     return message
 
-async def add_message(r, stream="test"):
+async def add_message(stream="test"):
     """ Add log message to Redis stream. """
-    message = json.dumps(random_message())
-    ret = await r.xadd(
+    message = json.dumps(await random_message())
+    ret = await rpool.xadd(
         name=stream,
         fields={"json": message},
         maxlen=200000,
@@ -165,7 +159,8 @@ app = FastAPI()
 @app.on_event("startup")
 async def startup_event():
     """ Initialize config on startup. """
-    init_config()
+    await populate_capitals()
+    await init_config()
 
 @app.get("/api/generator/enable", response_class=JSONResponse)
 async def enable_generator(background_tasks: BackgroundTasks):
@@ -190,15 +185,14 @@ async def generate_messages(
     n: int = 100
     ):
     """ Call log generator to generate n messages to stream. """
-    r = aioredis.Redis(connection_pool=aiorpool)
     for _ in range(n):
-        await add_message(r, stream)
+        await add_message(stream)
 
 
 @app.get("/api/generator/config", response_class=JSONResponse)
-def get_generator_config():
+async def get_generator_config():
     """ Get generator config. """
-    config = get_config()
+    config = await get_config()
     return JSONResponse(content={"response": "ok", "config": config})
 
 class GeneratorMessageAdd(BaseModel):
@@ -207,9 +201,9 @@ class GeneratorMessageAdd(BaseModel):
     message: str
 
 @app.post("/api/generator/message/add", response_class=JSONResponse)
-def generator_message_add(query: GeneratorMessageAdd):
+async def generator_message_add(query: GeneratorMessageAdd):
     """ Add message for host. """
-    ret = rpool.json().arrappend("generator:config", f"$.hosts[{query.hostidx}].messages", query.message)
+    ret = await rpool.json().arrappend("generator:config", f"$.hosts[{query.hostidx}].messages", query.message)
     return JSONResponse(ret)
 
 class GeneratorMessageDelete(BaseModel):
@@ -218,9 +212,9 @@ class GeneratorMessageDelete(BaseModel):
     msgidx: int
 
 @app.post("/api/generator/message/delete", response_class=JSONResponse)
-def generator_message_delete(query: GeneratorMessageDelete):
+async def generator_message_delete(query: GeneratorMessageDelete):
     """ Delete message from host. """
-    ret = rpool.json().arrpop("generator:config", f"$.hosts[{query.hostidx}].messages", query.msgidx)
+    ret = await rpool.json().arrpop("generator:config", f"$.hosts[{query.hostidx}].messages", query.msgidx)
     return JSONResponse(ret)
 
 class GeneratorMessageModify(BaseModel):
@@ -230,9 +224,9 @@ class GeneratorMessageModify(BaseModel):
     message: str
 
 @app.post("/api/generator/message/modify", response_class=JSONResponse)
-def generator_message_modify(query: GeneratorMessageModify):
+async def generator_message_modify(query: GeneratorMessageModify):
     """ Modify message on host. """
-    ret = rpool.json().set("generator:config", f"$.hosts[{query.hostidx}].messages[{query.msgidx}]", query.message)
+    ret = await rpool.json().set("generator:config", f"$.hosts[{query.hostidx}].messages[{query.msgidx}]", query.message)
     return JSONResponse(ret)
 
 class GeneratorConfig(BaseModel):
@@ -240,9 +234,9 @@ class GeneratorConfig(BaseModel):
     config: list
 
 @app.post("/api/generator/config/update", response_class=JSONResponse)
-def generator_config_write(query: GeneratorConfig):
+async def generator_config_write(query: GeneratorConfig):
     """ Replace configuration. """
-    ret = rpool.json().set("generator:config", "$.hosts", query.config)
+    ret = await rpool.json().set("generator:config", "$.hosts", query.config)
     return JSONResponse(ret)
 
 class GeneratorHostOptions(BaseModel):
@@ -258,13 +252,13 @@ class GeneratorHostAdd(BaseModel):
     messages: list[str]
 
 @app.post("/api/generator/host/add", response_class=JSONResponse)
-def generator_host_add(query: GeneratorHostAdd):
+async def generator_host_add(query: GeneratorHostAdd):
     """ Add host to generator configuration. """
-    ret = rpool.json().arrappend("generator:config", f"$.hosts", query.dict())
+    ret = await rpool.json().arrappend("generator:config", f"$.hosts", query.dict())
     return JSONResponse(ret)
 
 def main():
-    print(random_message())
+    pass
 
 if __name__ == '__main__':
     main()

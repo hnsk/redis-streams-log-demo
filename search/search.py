@@ -4,7 +4,8 @@ from os import environ
 from typing import List, Tuple
 from pydantic import BaseModel
 
-import redis
+import redis.asyncio
+import redis.exceptions
 
 from redis.commands.search import reducers
 from redis.commands.search.aggregation import AggregateRequest, Asc, Desc
@@ -45,7 +46,7 @@ AUTOCOMPLETE_DEFAULTS = [
     "status"
 ]
 
-rpool = redis.Redis(
+rpool = redis.asyncio.Redis(
     host=REDIS_HOST,
     port=REDIS_PORT,
     decode_responses=True
@@ -55,7 +56,7 @@ client = rpool.ft(
     index_name=IDX_NAME,
 )
 
-def create_index(
+async def create_index(
     idx_schema: Tuple = LOG_SCHEMA,
     idx_prefix: List = LOG_PREFIX
     ):
@@ -66,9 +67,10 @@ def create_index(
         index_type=IndexType.JSON
         )
     try:
-        client.info()
+        #print(dir(client))
+        await client.info()
     except redis.exceptions.ResponseError:
-        client.create_index(idx_schema, definition=definition)
+        await client.create_index(idx_schema, definition=definition)
 
 def generate_literal_query(cmd: str, idx: str, build_args):
     """ Return literal query. """
@@ -81,7 +83,7 @@ def generate_literal_query(cmd: str, idx: str, build_args):
     
     return ' '.join(literal_query)
 
-def search_index(query: str, start: int = 0, limit: int = 100, sortby_field: str = "timestamp", sort_asc: bool = False):
+async def search_index(query: str, start: int = 0, limit: int = 100, sortby_field: str = "timestamp", sort_asc: bool = False):
     """ Search for query from index. """
 
     while True:
@@ -102,10 +104,10 @@ def search_index(query: str, start: int = 0, limit: int = 100, sortby_field: str
         )
 
         literal_query = f"FT.SEARCH {IDX_NAME} \"{request.query_string()}\" {' '.join([str(x) for x in request.get_args()[1:]])}"
-        res = client.search(request)
+        res = await client.search(request)
         return res, literal_query
 
-def aggregate_by_field(query: str, field: str):
+async def aggregate_by_field(query: str, field: str):
     """ Aggregate counts for query and group by field. """
 
     request = (
@@ -121,15 +123,11 @@ def aggregate_by_field(query: str, field: str):
 
     literal_query = generate_literal_query("FT.AGGREGATE", IDX_NAME, request.build_args())
     res = None
-    while True:
-        res = client.aggregate(request)
-        yield res, literal_query
-        if not res.cursor:
-            break
+    res = await client.aggregate(request)
     return res, literal_query
 
 
-def get_cities_aggregate_by_coordinates(coordinates: str, distance: int, query: str = '*'):
+async def get_cities_aggregate_by_coordinates(coordinates: str, distance: int, query: str = '*'):
     """ Get cities """
 
     request = (
@@ -148,21 +146,20 @@ def get_cities_aggregate_by_coordinates(coordinates: str, distance: int, query: 
     )
     literal_query = generate_literal_query("FT.AGGREGATE", IDX_NAME, request.build_args())
     res = None
-    res = client.aggregate(request)
+    res = await client.aggregate(request)
     return res, literal_query
 
-
-def autocomplete_suggestion_add(idx: str, string: str, score: float = 1, increment=True):
+async def autocomplete_suggestion_add(idx: str, string: str, score: float = 1, increment=True):
     sug = Suggestion(string=string, score=score)
-    res = rpool.ft().sugadd(idx, sug, increment=increment)
+    res = await rpool.ft().sugadd(idx, sug, increment=increment)
     return res
 
-def autocomplete_add_defaults():
+async def autocomplete_add_defaults():
     for prefix in AUTOCOMPLETE_DEFAULTS:
-        autocomplete_suggestion_add("autocomplete", prefix, 1)
+        await autocomplete_suggestion_add("autocomplete", prefix, 1)
 
-def autocomplete_delete(idx: str):
-    rpool.delete(idx)
+async def autocomplete_delete(idx: str):
+    await rpool.delete(idx)
 
 ### FastAPI
 
@@ -171,9 +168,9 @@ app = FastAPI()
 @app.on_event("startup")
 async def startup_event():
     """ Initialize config on startup. """
-    autocomplete_delete("autocomplete")
-    autocomplete_add_defaults()
-    create_index()
+    await autocomplete_delete("autocomplete")
+    await autocomplete_add_defaults()
+    await create_index()
 
 class SearchQuery(BaseModel):
     """ Search query definition. Accepted parameters are a query string. """
@@ -184,7 +181,7 @@ class SearchQuery(BaseModel):
     sort_asc: bool = False
 
 @app.post("/api/search", response_class=JSONResponse)
-def search_string(query: SearchQuery):
+async def search_string(query: SearchQuery):
     """ Search string from logs and return results and information. """
 
     results = {}
@@ -194,7 +191,7 @@ def search_string(query: SearchQuery):
     results['literal_query'] = ""
     results['error'] = ""
     try:
-        res, literal_query = search_index(
+        res, literal_query = await search_index(
                                           query=query.query,
                                           start=query.start,
                                           limit=query.limit,
@@ -231,7 +228,7 @@ class AggregateQuery(BaseModel):
     field: str
 
 @app.post("/api/search/aggregate", response_class=JSONResponse)
-def search_aggregate_by_fields(query: AggregateQuery):
+async def search_aggregate_by_fields(query: AggregateQuery):
     """ Aggregate log severities based on the provided query. """
 
     result = {}
@@ -239,13 +236,13 @@ def search_aggregate_by_fields(query: AggregateQuery):
     result["literal_query"] = ""
     result["error"] = ""
     try:
-        for res, literal_query in aggregate_by_field(query.query, query.field):
-            result["literal_query"] = literal_query
-            for row in res.rows:
-                result["results"].append({
-                    "field": row[1],
-                    "entries": row[3]
-                })
+        res, literal_query = await aggregate_by_field(query.query, query.field)
+        result["literal_query"] = literal_query
+        for row in res.rows:
+            result["results"].append({
+                "field": row[1],
+                "entries": row[3]
+            })
     except redis.exceptions.ResponseError:
         print(f"invalid query {query.query}")
         result["error"] = f"Invalid query {query.query}"
@@ -260,14 +257,14 @@ class CitiesAggregateQuery(BaseModel):
     query: str = '*'
 
 @app.post("/api/search/aggregate/cities", response_class=JSONResponse)
-def get_cities_by_coordinates(query: CitiesAggregateQuery):
+async def get_cities_by_coordinates(query: CitiesAggregateQuery):
     """ Get cities within specified distance of given coordinates"""
     result = {}
     result["results"] = []
     result["literal_query"] = ""
     result["error"] = ""
 
-    res, literal_query = get_cities_aggregate_by_coordinates(
+    res, literal_query = await get_cities_aggregate_by_coordinates(
         coordinates=query.coordinates,
         distance=query.distance,
         query=query.query)
@@ -289,9 +286,10 @@ class SuggestionQuery(BaseModel):
     prefix: str
 
 @app.post("/api/search/suggestion/get", response_class=JSONResponse)
-def get_autocomplete_suggestion(query: SuggestionQuery):
+async def get_autocomplete_suggestion(query: SuggestionQuery):
     """ Get autocompletion suggestion for prefix. """
-    res = rpool.ft().sugget(key=query.index, prefix=query.prefix, num=5)
+
+    res = await rpool.ft().sugget(key=query.index, prefix=query.prefix, num=5)
     res = [x.string for x in res]
     return JSONResponse(res)
 
@@ -300,22 +298,26 @@ class AutocompletePrefix(BaseModel):
     prefix: str
 
 @app.post("/api/search/suggestion/add", response_class=JSONResponse)
-def add_autocomplete_suggestion(query: AutocompletePrefix):
+async def add_autocomplete_suggestion(query: AutocompletePrefix):
     """ Add autocomplete suggestion. """
-    return autocomplete_suggestion_add("autocomplete", query.prefix)
+    return await autocomplete_suggestion_add("autocomplete", query.prefix)
 
 class TagValsQuery(BaseModel):
     """ Tagvals query payload. """
     field: str
 
 @app.post("/api/search/tagvals/get", response_class=JSONResponse)
-def get_tagvals(query: TagValsQuery):
+async def get_tagvals(query: TagValsQuery):
     """ Get tagvals for indexed field. """
-    res = client.tagvals(tagfield=query.field)
+    res = await client.tagvals(tagfield=query.field)
     return JSONResponse(res)
 
-def main():
-    res, literal_query = search_index(query="mail", start=5, limit=5)
+async def main():
+    await create_index()
+    await autocomplete_delete("autocomplete")
+    await autocomplete_add_defaults()
+    
+    res, literal_query = await search_index(query="mail", start=5, limit=5)
     for doc in res.docs:
         print(doc.id)
     
@@ -324,7 +326,7 @@ def main():
     result["literal_query"] = ""
     result["error"] = ""
 
-    res, literal_query = get_cities_aggregate_by_coordinates(coordinates="24.933,60.16666", distance=400)
+    res, literal_query = await get_cities_aggregate_by_coordinates(coordinates="24.933,60.16666", distance=400)
     result["literal_query"] = literal_query
     for row in res.rows:
         result["results"].append({
@@ -337,4 +339,5 @@ def main():
     print(result)
 
 if __name__ == '__main__':
-    main()
+    import asyncio
+    asyncio.run(main())
