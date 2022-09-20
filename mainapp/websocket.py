@@ -5,7 +5,8 @@ from os import environ
 from time import time
 from pydantic import BaseModel
 
-import redis.asyncio as redis
+import redis.asyncio
+import redis.exceptions
 
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import JSONResponse
@@ -39,7 +40,7 @@ class WebsocketClientConnection:
 app = FastAPI()
 
 # Create synchronous connection pool for Redis
-rpool = redis.Redis(
+rpool = redis.asyncio.Redis(
     host=REDIS_HOST,
     port=REDIS_PORT,
     decode_responses=True
