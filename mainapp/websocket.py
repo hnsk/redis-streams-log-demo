@@ -13,8 +13,6 @@ from fastapi.responses import JSONResponse
 from redis import ResponseError
 from websockets.exceptions import ConnectionClosedOK, ConnectionClosedError
 
-import gears_functions
-
 REDIS_HOST = environ.get('REDIS_HOST') or 'localhost'
 REDIS_PORT = int(environ.get('REDIS_PORT') or '6379')
 REDIS_CONSUMER_GROUP = environ.get('REDIS_CONSUMER_GROUP') or 'testgroup'
@@ -135,11 +133,10 @@ async def startup_event():
     await rpool.delete("severities")
 
     # Remove existing Redis Gears script registrations if they exist.
-    active_gears_registrations = await rpool.execute_command('RG.DUMPREGISTRATIONS')
-    for registration in active_gears_registrations:
-        print(f"Unregistering: {registration[1]}... ", end="")
-        print(await rpool.execute_command('RG.UNREGISTER', registration[1]))
-        await rpool.delete("test")
+    try:
+        await rpool.execute_command('TFUNCTION', 'DELETE', 'stream_splitter')
+    except:
+        pass
 
     # Delete existing stream if it exists
     await rpool.delete(REDIS_STREAM_NAME)
@@ -180,7 +177,9 @@ async def register_stream_splitter():
     for client_id in manager.active_connections:
         manager.active_connections[client_id].remove_stream(REDIS_STREAM_NAME)
     print("Registering severity splitter... ", end="")
-    print(await rpool.execute_command('RG.PYEXECUTE', gears_functions.SPLIT_BY_SEVERITY))
+
+    with open('stream_splitter.js', 'r') as file:
+        await rpool.execute_command('TFUNCTION', 'LOAD', 'REPLACE', file.read())
     manager.activate_splitter()
     return JSONResponse(content={"response": "ok"})
 
