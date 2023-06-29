@@ -178,8 +178,13 @@ async def register_stream_splitter():
         manager.active_connections[client_id].remove_stream(REDIS_STREAM_NAME)
     print("Registering severity splitter... ", end="")
 
+    splitter_config = {
+        'stream_name': REDIS_STREAM_NAME,
+        'consumer_name': 'streams_demo',
+        'log_prefix': 'logs'
+    }
     with open('stream_splitter.js', 'r') as file:
-        await rpool.execute_command('TFUNCTION', 'LOAD', 'REPLACE', file.read())
+        await rpool.execute_command('TFUNCTION', 'LOAD', 'REPLACE', 'CONFIG', json.dumps(splitter_config), file.read())
     manager.activate_splitter()
     return JSONResponse(content={"response": "ok"})
 
