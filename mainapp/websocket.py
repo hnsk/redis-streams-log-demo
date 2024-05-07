@@ -132,12 +132,6 @@ async def startup_event():
     await rpool.delete("consumerids")
     await rpool.delete("severities")
 
-    # Remove existing Redis Gears script registrations if they exist.
-    try:
-        await rpool.execute_command('TFUNCTION', 'DELETE', 'stream_splitter')
-    except:
-        pass
-
     # Delete existing stream if it exists
     await rpool.delete(REDIS_STREAM_NAME)
 
@@ -164,6 +158,7 @@ async def get_clientid():
 @app.get("/api/streams/splitter", response_class=JSONResponse)
 async def register_stream_splitter():
     """ Register Redis Gears function to split stream to severities. """
+    pass
     # Trim all old entries from the stream before registration.
     print(f"Trimming {REDIS_STREAM_NAME} before registering Gears function")
     await rpool.xtrim(
@@ -178,14 +173,7 @@ async def register_stream_splitter():
         manager.active_connections[client_id].remove_stream(REDIS_STREAM_NAME)
     print("Registering severity splitter... ", end="")
 
-    splitter_config = {
-        'stream_name': REDIS_STREAM_NAME,
-        'consumer_name': 'streams_demo',
-        'log_prefix': 'logs'
-    }
-    with open('stream_splitter.js', 'r') as file:
-        await rpool.execute_command('TFUNCTION', 'LOAD', 'REPLACE', 'CONFIG', json.dumps(splitter_config), file.read())
-    manager.activate_splitter()
+    await rpool.set("stream_splitter", 1)
     return JSONResponse(content={"response": "ok"})
 
 @app.get("/api/streams/update", response_class=JSONResponse)
