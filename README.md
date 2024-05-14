@@ -5,8 +5,6 @@ Uses [FastAPI](https://fastapi.tiangolo.com/) for asynchronous web serving. Logg
 Frontend is built on [Quasar](https://quasar.dev/).
 
 Redis modules:
-- [RedisGears](https://oss.redislabs.com/redisgears/)
-  - Subscribe to main stream and write JSON/TimeSeries
 - [RedisJSON 2.0+](https://oss.redis.com/redisjson/)
   - Log generator configuration
   - Log events for indexing and modifying
@@ -44,7 +42,7 @@ https://gitpod.io/#https://github.com/hnsk/redis-streams-log-demo
 # Components
 
 ## Mainapp
-Main app for WebSocket connections and initialising Gears
+Main app for WebSocket connections
 
 ## Frontend
 Nginx for serving Quasar frontend and proxying to all backend APIs
@@ -57,6 +55,9 @@ Service for RediSearch components
 
 ## TimeSeries
 Service for TimeSeries components
+
+## Stream splitter
+Service for processing "test" stream and split it into stream per severity. Also adds JSON and TimeSeries entries for each event.
 
 ## RedisInsight
 Service for RedisInsight
@@ -71,7 +72,7 @@ RedisInsight is also available at http://yourhost:8001
 ## Stream viewer
 - Shows latest 25 log messages from streams.
 - Generate messages: generates n messages to stream "test"
-- Register stream splitter: Registers RedisGears function to split "test" to streams for each severity and stores the JSON events for RedisSearch
+- Register stream splitter: Enables stream splitter service to split "test" to streams for each severity and stores the JSON events for RediSearch
 
 ## Search logs
 - Search: If input is longer than 2 characters, every time the field is updated, it will perform RediSearch query with the input value

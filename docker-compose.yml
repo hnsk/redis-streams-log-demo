@@ -2,7 +2,7 @@ version: '3'
 
 services:
   redis:
-    image: "redis/redis-stack:edge"
+    image: "redis/redis-stack:latest"
     ports:
       - "6379:6379"
       - "8001:8001"
@@ -53,6 +53,21 @@ services:
     build: ./timeseries
     depends_on:
       - "redis"
+    links:
+      - "redis:redis"
+    environment:
+      - "REDIS_HOST=${REDIS_HOST:-redis}"
+      - REDIS_PORT=6379
+      - PYTHONUNBUFFERED=1
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  streamsplitter:
+    build: ./streamsplitter
+    depends_on:
+      - "redis"
+      - "mainapp"
     links:
       - "redis:redis"
     environment:
